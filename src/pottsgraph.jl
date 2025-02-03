@@ -51,9 +51,10 @@ function PottsGraph(
 )
     # If a default alphabet (binary, nucleotides, etc...) matches `q`, use it
     # Otherwise, do not use an alphabet
-    alphabet = let
-        A = convert(IntType, BioSequenceMappings.default_alphabet(q))
-        q == length(A) ? A : nothing
+    alphabet = try
+        convert(IntType, BioSequenceMappings.default_alphabet(q))
+    catch _
+        nothing
     end
 
     return if init == :null
@@ -160,6 +161,11 @@ end
 ####### Misc #######
 #==================#
 
+"""
+    energy(s, g::PottsGraph)
+
+Energy of sequence `s` in `g`.
+"""
 function energy(s::AbstractVector{<:Integer}, g::PottsGraph)
     (; L, q) = size(g)
     E = 0.0

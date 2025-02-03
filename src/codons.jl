@@ -50,11 +50,12 @@ end
 #==========================================#
 ############### Genetic code ###############
 #==========================================#
-#! format: off
+
 const aa_order = [
 'K', 'N', 'K', 'N', 'T', 'T', 'T', 'T', 'R', 'S', 'R', 'S', 'I', 'I', 'M', 'I', 'Q', 'H', 'Q', 'H', 'P', 'P', 'P', 'P', 'R', 'R', 'R', 'R', 'L', 'L', 'L', 'L', 'E', 'D', 'E', 'D', 'A', 'A', 'A', 'A', 'G', 'G', 'G', 'G', 'V', 'V', 'V', 'V', '*', 'Y', '*', 'Y', 'S', 'S', 'S', 'S', '*', 'C', 'W', 'C', 'L', 'F', 'L', 'F'
 ]
-#! format: on
+
+# Dictionary from Codon to Char
 const _genetic_code_struct = let
     code = Dict{Codon,Char}()
     i = 1
@@ -65,6 +66,7 @@ const _genetic_code_struct = let
     code[Codon('-', '-', '-')] = '-'
     code
 end
+# Dictionary from Codon to Int
 const _genetic_code_integers = let
     code = Dict{IntType,Union{Nothing,IntType}}()
     for (codon, aa) in _genetic_code_struct
@@ -89,17 +91,32 @@ Translate `c` and return the amino acid as a `Char`.
 """
 genetic_code(codon::Codon) = _genetic_code_struct[codon]
 
+
+const _reverse_code_integers = let
+    rcode = Dict{IntType, Vector{IntType}}()
+    for aa in 1:length(aa_alphabet)
+        codons = findall(codon_alphabet.index_to_char) do c
+            genetic_code(c) == aa_alphabet(aa)
+        end
+        rcode[aa] = IntType.(codons)
+    end
+    rcode
+end
+const _reverse_code_struct = let
+    rcode = Dict{Char, Vector{Codon}}()
+    for aa in symbols(aa_alphabet)
+        rcode[aa] = map(codon_alphabet, _reverse_code_integers[aa_alphabet(aa)])
+    end
+    rcode
+end
+
 """
     reverse_code(aa)
 
 Return the set of codons coding for `aa`.
 """
-function reverse_code(aa::T) where {T<:Integer}
-    return T.(
-        findall(c -> genetic_code(c) == aa_alphabet(aa), codon_alphabet.index_to_char)
-    )
-end
-reverse_code(aa::AbstractChar) = map(codon_alphabet, reverse_code(aa_alphabet(aa)))
+reverse_code(aa::T) where {T<:Integer} = T.(_reverse_code_integers[aa])
+reverse_code(aa::AbstractChar) = _reverse_code_struct[aa]
 """
     reverse_code_rand(aa)
 
