@@ -48,6 +48,13 @@ mutable struct AASequence{T<:Integer} <: AbstractSequence
 end
 
 Base.copy(s::AASequence) = AASequence(copy(s.seq))
+function Base.copy!(dest::AASequence, source::AASequence)
+    @argcheck length(dest) == length(source)
+    for (i, a) in enumerate(source.seq)
+        dest.seq[i] = a
+    end
+    return dest
+end
 """
     AASequence(L; T)
 
@@ -127,6 +134,14 @@ function Base.setindex!(s::CodonSequence, x::Integer, i)
     return setindex!(s.seq, x, i)
 end
 Base.copy(s::CodonSequence) = CodonSequence(copy(s.seq), copy(s.aaseq))
+function Base.copy!(dest::CodonSequence, source::CodonSequence)
+    @argcheck length(dest) == length(source)
+    for (i, (c, aa)) in enumerate(zip(source.seq, source.aaseq))
+        dest.seq[i] = c
+        dest.aaseq[i] = aa
+    end
+    return dest
+end
 
 translate(s::CodonSequence) = AASequence(s.aaseq)
 function sequence(x::CodonSequence; as_codons=true)
@@ -190,6 +205,13 @@ end
 NumSequence(L::Integer, q::Integer; T=IntType) = NumSequence{T,q}(L)
 
 Base.copy(x::NumSequence{T,q}) where {T,q} = NumSequence(copy(x.seq), q)
+function Base.copy!(dest::NumSequence{T,q}, source::NumSequence{T,q}) where {T,q}
+    @argcheck length(source) == length(dest)
+    for (i,a) in enumerate(sequence(source))
+        dest.seq[i] = a
+    end
+    return dest
+end
 
 function Base.getproperty(x::NumSequence{T,q}, sym::Symbol) where {T,q}
     if sym == :q

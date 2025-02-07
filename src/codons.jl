@@ -3,6 +3,7 @@
 #==================================================================#
 
 const nucleotides = ['A', 'C', 'G', 'T']
+const _nucleotides_gap = ['A', 'C', 'G', 'T', '-']
 """
     aa_alphabet
     nt_alphabet
@@ -25,7 +26,16 @@ const nt_alphabet = Alphabet(nucleotides, IntType)
     b1::Char
     b2::Char
     b3::Char
+    function Codon(b1, b2, b3)
+        @argcheck b1 in _nucleotides_gap && b2 in _nucleotides_gap && b3 in _nucleotides_gap
+         return new(b1, b2, b3)
+    end
 end
+function Codon(s::AbstractString)
+    @argcheck length(s) == 3
+    return Codon(s[1], s[2], s[3])
+end
+
 """
     bases(codon)
 
@@ -167,7 +177,7 @@ end
 # Only all gaps or all nt codons are valid
 # Anything else means a frameshift and I do not deal with that here
 isgap(c::Codon) = all(==('-'), bases(c))
-function isvalid(c::Codon)
+function Base.isvalid(c::Codon)
     return if isgap(c)
         true
     elseif all(in(nucleotides), bases(c))
@@ -214,7 +224,7 @@ what other codons are accessible by one mutation?
 !!! I consider here that a codon is always accessible from itself! *i.e.* `c` will appear in the list
 =#
 
-const _codon_access_map = let
+function _build_codon_access_map()
     M = Dict{Tuple{IntType,IntType},Tuple{Vector{IntType},Vector{IntType}}}()
     for c in 1:length(codon_alphabet), i in 1:3
         codon = codon_alphabet(c)
@@ -230,13 +240,59 @@ const _codon_access_map = let
     end
     M
 end
+const _codon_access_map = _build_codon_access_map()
+
+#=
+Similar to the above, with the following differences.
+- Stores all codons accessible by any nucleotide or gap mutation. Consequently, keys are `IntType` (just the codon)
+- Gap mutations are counted: the gap codon is accessible from all codons, and all codons are accessible from the gap.
+- A codon is not accessible from itself (this is used for continuous time sampling).
+=#
+function _build_codon_access_map_2()
+    M = Dict{IntType,Tuple{Vector{IntType},Vector{IntType}}}()
+
+    for c in 1:length(codon_alphabet)
+        codon = codon_alphabet(c)
+        isstop(codon) && continue
+
+        # Gap case first
+        if isgap(codon)
+            accessible_codons = collect(1:length(codon_alphabet))
+            filter!(c -> iscoding(codon_alphabet(c)), accessible_codons) # remove all non-coding (i.e. gap and stop)
+            M[c] = (accessible_codons, map(genetic_code, accessible_codons))
+            continue
+        end
+
+
+        # general case
+        accessible_codons = Int[]
+        # check all mutations, filter for coding codons
+        for b in 1:3, nt in nucleotides
+            nts = collect(bases(codon))
+            nts[b] = nt
+            new_codon = Codon(nts...)
+            if iscoding(new_codon)
+                push!(accessible_codons, codon_alphabet(new_codon))
+            end
+        end
+        # add gap codon
+        push!(accessible_codons, codon_alphabet(Codon("---")))
+        # store
+        M[c] = (accessible_codons, map(genetic_code, accessible_codons))
+    end
+
+    return M
+end
+
+const _codon_access_map_2 = _build_codon_access_map_2()
+
 """
     accessible_codons(codon, b::Integer)
 
 Return all codons/amino-acids accessible by mutating `codon` at base `b`.
 Value returned is a `Tuple` whose first/second elements represent codons/amino-acids.
 """
-function accessible_codons(codon::T, b::Integer) where {T<:Integer}
+function accessible_codons(codon::Integer, b::Integer)
     return get(_codon_access_map, (codon, b), (nothing, nothing))
 end
 function accessible_codons(codon::Codon, b::Integer)
@@ -247,6 +303,19 @@ function accessible_codons(codon::Codon, b::Integer)
         map(codon_alphabet, Cs[1]), map(aa_alphabet, Cs[2])
     end
 end
+
+function accessible_codons(codon::Integer)
+    return get(_codon_access_map_2, codon, (nothing, nothing))
+end
+function accessible_codons(codon::Codon)
+    Cs = get(_codon_access_map_2, codon_alphabet(codon), nothing)
+    return if isnothing(Cs)
+        Codon[], Char[]
+    else
+        map(codon_alphabet, Cs[1]), map(aa_alphabet, Cs[2])
+    end
+end
+
 
 #===========================================================================#
 ########################## Amino acid degeneracies ##########################

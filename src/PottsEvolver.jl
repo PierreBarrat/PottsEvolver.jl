@@ -2,6 +2,7 @@ module PottsEvolver
 
 using ArgCheck
 using BioSequenceMappings
+using Distributions
 using Logging
 using LoggingExtras
 using PoissonRandom
@@ -14,8 +15,8 @@ using UnPack
 export read_fasta, symbols # from BioSequenceMappings
 export read_tree # from TreeTools
 
-import Base: ==, hash
-import Base: copy, show, write
+import Base: ==, hash, isvalid
+import Base: copy, copy!, show, write
 import Base: getindex, setindex!
 import Base: iterate, length, eltype, size
 
@@ -42,8 +43,10 @@ export energy
 # public set_gauge!
 #! format: on
 
-include("sampling_core.jl")
+include("sampling_parameters.jl")
 export BranchLengthMeaning, SamplingParameters
+
+include("sampling_core.jl")
 #! format: off
 # public mcmc_steps!, steps_from_branchlength
 #! format: on

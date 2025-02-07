@@ -24,7 +24,7 @@ end
 @testset "Output values" begin
     L, q, M = (4, 21, 2)
     g = PottsGraph(L, q; init=:rand)
-    @test g.alphabet == aa_alphabet # used q = 21
+    @test g.alphabet == aa_alphabet
 
     params = SamplingParameters(; Teq=1)
 
@@ -34,20 +34,13 @@ end
     @test S isa AbstractVector{<:PottsEvolver.NumSequence}
 
     # because g has no alphabet
-    g_noalphabet = let
-        x = deepcopy(g)
-        x.alphabet = nothing
-        x
-    end
+    g_noalphabet = PottsGraph(L, q; init=:rand, alphabet=nothing)
     S, _ = mcmc_sample(g_noalphabet, M, params; init=[1, 2, 3, 4], alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.NumSequence}
 
     # because g has an alphabet that is not the default aa
-    g_strangealphabet = let
-        x = deepcopy(g)
-        x.alphabet = Alphabet("ACDEFGHIKLMNPQRSTVWY-")
-        x
-    end
+    alphabet = Alphabet("ACDEFGHIKLMNPQRSTVWY-")
+    g_strangealphabet = PottsGraph(L, q; init=:rand, alphabet)
     S, _ = mcmc_sample(
         g_strangealphabet, M, params; init=[1, 2, 3, 4], alignment_output=false
     )

@@ -26,11 +26,13 @@
 end
 
 """
-    PottsGraph(L, q[, T]; init = :null)
+    PottsGraph(L, q[, T]; init = :null, alphabet)
 
 Return a `PottsGraph{T}` of the required size.
 - `init == :null`: parameters are intialized to zero.
 - `init == :rand`: parameters are randomly sampled using `Jrand` and `hrand` keywords.
+
+`alphabet` is `aa_alphabet` if `q=21`, `nothing` otherwise.
 
 ## Random initialization
 
@@ -48,15 +50,8 @@ function PottsGraph(
     init=:null,
     Jrand=N -> 1 / L * randn(N, N),
     hrand=N -> 1 / sqrt(L) * randn(N),
+    alphabet=(q == 21 ? aa_alphabet : nothing),
 )
-    # If a default alphabet (binary, nucleotides, etc...) matches `q`, use it
-    # Otherwise, do not use an alphabet
-    alphabet = try
-        convert(IntType, BioSequenceMappings.default_alphabet(q))
-    catch _
-        nothing
-    end
-
     return if init == :null
         PottsGraph(; J=zeros(T, q, q, L, L), h=zeros(T, q, L), alphabet)
     elseif init == :rand

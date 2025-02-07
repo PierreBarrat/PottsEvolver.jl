@@ -1,8 +1,8 @@
 function mcmc_sample_chain(
     g::PottsGraph,
-    M::Int,
+    M::Integer,
     s0::AbstractSequence,
-    params::SamplingParameters;
+    params::SamplingParameters{<:Integer};
     rng=Random.GLOBAL_RNG,
     progress_meter=true,
     alignment_output=true,

@@ -67,7 +67,7 @@ end
 @testset "access functions" begin
     L, q = 10, 21
     g = PottsGraph(L, q; init=:rand)
-    tree = balanced_binary_tree(8, 1.0)
+    tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
     params = SamplingParameters(; step_meaning=:changed, Teq=1, burnin=100) # burnin should not matter!
 
     # providing root sequence

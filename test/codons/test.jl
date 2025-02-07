@@ -27,3 +27,26 @@ end
             (all(in(['A', 'C', 'G', 'T']), bases(codon)) || all(==('-'), bases(codon)))
     end
 end
+
+@testset "Accessible codons" begin
+    # Check consistency between base-specific and total accessibility
+    # only expected to work for coding (non-gap) codons
+    codons = map(codon_alphabet, filter(PottsEvolver.iscoding, symbols(codon_alphabet)))
+    for codon in codons
+        acc_cod_1 = mapreduce(vcat, 1:3) do b
+            PottsEvolver.accessible_codons(codon, b)[1]
+        end |> sort
+        acc_cod_2 = filter!(PottsEvolver.accessible_codons(codon)[1]) do c
+            !PottsEvolver.isgap(codon_alphabet(c)) # need to filter gap out
+        end |> sort
+        @test acc_cod_1 == acc_cod_2
+
+        acc_aa_1 = mapreduce(vcat, 1:3) do b
+            PottsEvolver.accessible_codons(codon, b)[2]
+        end |> sort
+        acc_aa_2 = filter!(PottsEvolver.accessible_codons(codon)[2]) do c
+            !PottsEvolver.isgap(c, aa_alphabet)
+        end |> sort
+        @test acc_aa_1 == acc_aa_2
+    end
+end
