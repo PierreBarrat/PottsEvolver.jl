@@ -105,6 +105,12 @@ function aa_gibbs_step!(
     i, b, new_codons, new_aas = pick_aa_mutation(s; rng)
     aaref = s.aaseq[i]
 
+    if isnothing(new_aas)
+        # no valid mutation was found - likely due to all gaps sequence
+        return (i=i, new_state=s[i], accepted=accepted, changed=false)
+    end
+
+    # Compute the Boltzmann distribution
     # Constructing the gibbs field p
     for (a, aanew) in enumerate(new_aas)
         if aanew == aaref
@@ -248,7 +254,7 @@ Return the position `i`, the base `b`, new potential codons and aas.
 Gap codons cannot be mutated using this.
 """
 function pick_aa_mutation(s::CodonSequence; rng=Random.GLOBAL_RNG)
-    max_cnt = 1000
+    max_cnt = 100
     cnt = 1
     # Pick i and b, and see if we can mutate the codon (if it's a gap we can't)
     @label again

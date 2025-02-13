@@ -13,7 +13,7 @@ function mcmc_sample_chain(
         error("I have to implement this case")
     end
     @unpack Teq, burnin = params
-    @argcheck Teq > 0 "Number of steps between samples `Teq` should be >0. Instead $(Teq)"
+    # @argcheck Teq > 0 "Number of steps between samples `Teq` should be >0. Instead $(Teq)"
     @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
     tmp_check_alphabet_consistency(g, s0)
 

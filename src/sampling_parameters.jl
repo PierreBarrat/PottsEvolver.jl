@@ -2,8 +2,10 @@
 ##################### SamplingParameters #####################
 #============================================================#
 
-const VALID_STEP_TYPES = [:gibbs, :metropolis]
+const VALID_STEP_TYPES = [:gibbs, :metropolis, :glauber, :sqrt]
 const VALID_STEP_MEANINGS = [:proposed, :accepted, :changed]
+const VALID_STEP_TYPES_CONTINUOUS = [:metropolis, :glauber, :sqrt]
+const VALID_STEP_TYPES_DISCRETE = [:gibbs, :metropolis]
 
 """
 ```
@@ -58,8 +60,8 @@ function steps_from_branchlength(τ::Real, p::BranchLengthMeaning, L::Int)
         return round(Int, τ)
     elseif p.length == :poisson
         return pois_rand(τ)
+    else throw(ArgumentError("Invalid `length` field $(p.length)"))
     end
-    @assert false "This state should never be reached"
 end
 
 """
@@ -78,24 +80,39 @@ branchlength_meaning::BranchLengthMeaning
 - `Teq` is measured in swaps: attempted (or accepted) change of one sequence position.
 - `burnin`: number of steps starting from the initial sequence before the first `Teq` are
     made.
-- `step_meaning` can take three values
+- `step_meaning` is only relevant for discrete sampling. It can take three values
     - `:proposed`: all mcmc steps count towards equilibration
     - `:accepted`: only accepted steps count (all steps for non-codon Gibbs)
     - `:changed`: only steps that lead to a change count (Gibbs can resample the same state)
     *Note*: Gibbs steps for codons are more complicated, since they involve the possibility
     Metropolis step for gaps, which can be rejected.
+
+- `fraction_gap_step` is only relevant for discrete sampling with codons.
 - `branchlength_meaning` is only useful if you sample along branches of a tree.
   See `?BranchLengthMeaning` for information.
 """
 @kwdef mutable struct SamplingParameters{T<:Real}
+    sampling_type = :discrete
     step_type::Symbol = :gibbs
-    step_meaning::Symbol = :accepted
-    Teq::T
+    Teq::T = Int(0)
     burnin::T = 5 * Teq
+    # for discrete sampling only
+    step_meaning::Symbol = :accepted
+    # for continuous sampling only - average substitution rate for a given Potts model
+    substitution_rate::Union{Nothing,FloatType} = nothing
+    # for the discrete codon algorithm (Gibbs for aa and Metropolis for gaps)
     fraction_gap_step::Float64 = 0.9
+    # when sampling on trees
     branchlength_meaning::BranchLengthMeaning = BranchLengthMeaning(:step, :exact)
     function SamplingParameters(
-        step_type, step_meaning, Teq::T, burnin::T, fraction_gap_step, branchlength_meaning
+        sampling_type,
+        step_type,
+        Teq::T,
+        burnin::T,
+        step_meaning,
+        substitution_rate,
+        fraction_gap_step,
+        branchlength_meaning,
     ) where {T}
         step_meaning = try
             Symbol(step_meaning)
@@ -103,16 +120,39 @@ branchlength_meaning::BranchLengthMeaning
             @error "Invalid `step_meaning` $step_meaning"
             throw(err)
         end
+
+        @argcheck sampling_type in (:discrete, :continuous)
+        if sampling_type == :discrete
+            @argcheck step_type in VALID_STEP_TYPES_DISCRETE """
+            For :discrete mcmc, `step_type` should be in $VALID_STEP_TYPES_DISCRETE.
+            Instead $(step_type).
+            """
+            @argcheck T <: Integer """
+            For :discrete mcmc, `Teq` should be an integer. Instead $(Teq) of type $(T).
+            """
+        elseif sampling_type == :continuous
+            @argcheck step_type in VALID_STEP_TYPES_CONTINUOUS """
+            For :continuous mcmc, `step_type` should be in $VALID_STEP_TYPES_CONTINUOUS.
+            Instead $(step_type).
+            """
+        end
+
         @argcheck step_meaning in VALID_STEP_MEANINGS """
-                `step_meaning` should be in $VALID_STEP_MEANINGS.
-                Instead $(step_meaning).
-            """
-        @argcheck step_type in VALID_STEP_TYPES """
-                `step_type` should be in $VALID_STEP_TYPES.
-                Instead $(step_type).
-            """
+            `step_meaning` should be in $VALID_STEP_MEANINGS.
+            Instead $(step_meaning).
+        """
+
+        @argcheck isnothing(substitution_rate) || substitution_rate > 0
+
         return new{T}(
-            step_type, step_meaning, Teq, burnin, fraction_gap_step, branchlength_meaning
+            sampling_type,
+            step_type,
+            Teq,
+            burnin,
+            step_meaning,
+            substitution_rate,
+            fraction_gap_step,
+            branchlength_meaning,
         )
     end
 end

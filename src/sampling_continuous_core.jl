@@ -4,48 +4,41 @@
     ΔE::Matrix{FloatType} # between seq and all other sequences at one mutation
     accessibility_mask::Matrix{Bool} = similar(ΔE, Bool)
     qL_buffer::Matrix{FloatType} = similar(ΔE) # useful for i.e. transition rates
+    ΔE_copy::Matrix{FloatType} = copy(ΔE)
     i::Union{Nothing,Integer} # position of the next mutation
     x::Union{Nothing,Integer} # state of the next mutation
+    R::Union{Nothing,FloatType} = nothing # average transition rate, used for scaling
+    function CTMCState{S}(sequence::S, q::Integer, L::Integer) where {S<:AbstractSequence}
+        return new{S}(
+            sequence,
+            nothing,
+            Matrix{FloatType}(undef, q, L), # ΔE
+            Matrix{Bool}(undef, q, L), # accessibility mask
+            Matrix{FloatType}(undef, q, L), # qxL buffer
+            Matrix{FloatType}(undef, q, L), # ΔE copy
+            nothing,
+            nothing,
+            nothing,
+        )
+    end
 end
 
 function CTMCState(sequence::CodonSequence)
     q = length(codon_alphabet)
     L = length(sequence)
-    return CTMCState{CodonSequence}(
-        sequence,
-        nothing,
-        Matrix{FloatType}(undef, q, L),
-        Matrix{FloatType}(undef, q, L),
-        Matrix{FloatType}(undef, q, L),
-        nothing,
-        nothing,
-    )
+    return CTMCState{CodonSequence}(sequence, q, L)
 end
 function CTMCState(sequence::AASequence)
     q = 21
     L = length(sequence)
-    return CTMCState{NumSequence{q}}(
-        sequence,
-        nothing,
-        Matrix{FloatType}(undef, q, L),
-        Matrix{FloatType}(undef, q, L),
-        Matrix{FloatType}(undef, q, L),
-        nothing,
-        nothing,
-    )
+    CTMCState{AASequence}(sequence, q, L)
 end
-function CTMCState(sequence::NumSequence{q}) where {q}
+function CTMCState(sequence::NumSequence{T,q}) where {T,q}
     L = length(sequence)
-    return CTMCState{NumSequence{q}}(
-        sequence,
-        nothing,
-        Matrix{FloatType}(undef, q, L),
-        Matrix{FloatType}(undef, q, L),
-        Matrix{FloatType}(undef, q, L),
-        nothing,
-        nothing,
-    )
+    CTMCState{NumSequence{T,q}}(sequence, q, L)
 end
+
+Base.size(state::CTMCState) = size(state.ΔE)
 
 #=============================================#
 ################ Main function ################
@@ -66,14 +59,13 @@ function mcmc_sample_continuous_chain(
         error("I have to implement this case")
     end
     @unpack Teq, burnin, step_type = params
-    @argcheck Teq > 0 "Time between samples `Teq` should be >0. Instead $(Teq)"
     @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
     tmp_check_alphabet_consistency(g, s0)
 
     @info """
     Sampling $M sequences using the following settings:
         - Type of sequence = $(supertype(typeof(s0)))
-        - Time between samples = $(Teq)
+        - Time between samples = $(FloatType(Teq))
         - burnin = $(burnin)
         - Type of sampling = continuous
         - Step style = $(params.step_type)
@@ -89,12 +81,24 @@ function mcmc_sample_continuous_chain(
     tvals = Vector{FloatType}(undef, M) # number of steps at each sample
     # substitution_times = Vector{FloatType}(undef, 0) # time of each substitution
 
+    R = if !isnothing(params.substitution_rate)
+        @info "Using provided average model substitution rate $(params.substitution_rate)"
+        params.substitution_rate
+    else
+        @info "Computing average substitution rate for the model using discrete sampling..."
+        (;value, time) = @timed average_transition_rate(g, step_type, s0; rng, progress_meter)
+        @info "Done in $time seconds"
+        @info "Average substitution rate: $value"
+        value
+    end
+
     # State structure for the sampling
     state = CTMCState(conf)
+    state.R = R
 
     # Burnin
     @info "Initializing with burnin time $(burnin)... "
-    burnin > 0 && mcmc_steps!(state, g, Teq, step_type; rng)
+    burnin > 0 && mcmc_steps!(state, g, Float64(params.burnin), step_type; rng) # Float to ensure this goes to the continuous version - improve it later
     S[1] = copy(state.seq)
     tvals[1] = burnin
 
@@ -111,13 +115,13 @@ function mcmc_sample_continuous_chain(
     @info "Sampling..."
     time = @elapsed for m in 2:M
         # doing Teq steps on the current configuration
-        substitution_times = mcmc_steps!(state, g, Teq, step_type; rng)
+        _, number_substitutions = mcmc_steps!(state, g, Float64(Teq), step_type; rng)
         # storing the result in S
         S[m] = copy(state.seq)
-        tvals[m] = tvals[m - 1] + Teq
+        tvals[m] = tvals[m - 1] + Float64(Teq)
         # misc.
         push!(
-            log_info, (;substitution_times)
+            log_info, (;number_substitutions)
         )
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
     end
@@ -127,10 +131,6 @@ function mcmc_sample_continuous_chain(
     return (; sequences, tvals, info=log_info, params=return_params(params, s0))
 end
 
-
-#=================================#
-############ Gillespie ############
-#=================================#
 
 function mcmc_steps!(
     sequence::AbstractSequence, g, Tmax::AbstractFloat, step_type; kwargs...
@@ -159,24 +159,50 @@ function mcmc_steps!(
     @argcheck length(state.seq) == size(g).L """
     Size of sequence and model do not match: $(length(state.seq)) and $(size(g).L)
     """
-
-    substitution_times = gillespie!(state, g, Tmax, step_type; kwargs...)
-    return state.seq, substitution_times # all substitutions are accepted
+    n_substitutions = gillespie!(state, g, Tmax, step_type; kwargs...)
+    return state.seq, n_substitutions # all substitutions are accepted
 end
 
+
+#=================================#
+############ Gillespie ############
+#=================================#
+
 function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
-    times = Float64[]
+    Tmax == 0 && return Float64[]
+
+    q, L = size(state)
+    # times = Float64[]
+    # sizehint!(times, Tmax*L)
+    n_substitutions = 0
 
     t = 0
     while true
-        Q, R = transition_rates!(state, g, step_type) # R ~ sum(Q): total rate
-        @assert R > 0 "Something went wrong in gillespie: null total rate"
-        # pick time of next substitution
-        Δt = rand(rng, Exponential(1/R))
-        t += Δt
-        t > Tmax && break
+        # @info "START"
 
-        push!(times, t)
+        state.ΔE_copy .= state.ΔE # memorize the old ΔE in case no move is made
+
+        # compute transition rates and scaled substitution rate
+        Q, R = transition_rates!(state, g, step_type)
+        @assert R > 0 "Something went wrong in gillespie: null total rate"
+        R_scaled = isnothing(state.R) ? R : R/state.R*L
+
+        # pick time of next substitution
+        Δt = rand(rng, Exponential(1/R_scaled))
+        t += Δt
+
+        # If time is too large, we stop
+        # This does not really influence the distribution of time to the next substitution
+        # as an exponential process is memory-less
+        if t > Tmax
+            state.ΔE .= state.ΔE_copy # reset `state` to its old state since no move is made
+            # state.seq and other important fields have not been modified yet
+            # state.qL_buffer and state.accessibility_mask were changed, but this is ok
+            break
+        end
+
+        # Time is in range (0, Tmax], we choose a substitution
+        # push!(times, t)
 
         # pick next substitution
         r = rand(rng)*R
@@ -195,14 +221,22 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
 
         # do the substitution
         gillespie_substitute!(state, i, a)
+        n_substitutions += 1
+        # @info "DONE"
     end
 
-    return times
+    # return times
+    return n_substitutions
 end
 
 function gillespie_substitute!(state, i, a)
     # copy sequence to state.previous_sequence, without allocation
-    copy!(state.previous_seq, state.seq)
+    if isnothing(state.previous_seq)
+        state.previous_seq = copy(state.seq)
+    else
+        copy!(state.previous_seq, state.seq)
+        # state.previous_seq = copy(state.seq)
+    end
     # change sequence
     _update_sequence!(state.seq, i, a)
     # set i, a
@@ -211,64 +245,151 @@ function gillespie_substitute!(state, i, a)
 
     return state
 end
+
 function _update_sequence!(sequence::AbstractSequence, i, a)
     sequence.seq[i] = a
 end
+
 function _update_sequence!(sequence::CodonSequence, i, a)
     sequence.seq[i] = a
     sequence.aaseq[i] = genetic_code(a)
+end
+
+
+#==============================================================================#
+########################### Average transition rates ###########################
+#==============================================================================#
+
+function average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence; rng=Random.GLOBAL_RNG, progress_meter=true)
+    (;L) = size(g)
+
+    M = 100
+    params = SamplingParameters(Teq = L*10) # default continuous sampling parameters
+    sample_discrete = mcmc_sample(g, M, params; alignment_output=false, init=s0, rng=rng, progress_meter=progress_meter).sequences
+    state = CTMCState(sample_discrete[1])
+    Rmean = mean(sample_discrete) do sequence
+        copy!(state.seq, sequence)
+        Q, R = transition_rates!(state, g, step_type)
+        R
+    end
+
+    return Rmean
 end
 
 #========================================================================#
 ############################ Transition rates ############################
 #========================================================================#
 
-function transition_rates!(state::CTMCState, g::PottsGraph, step_type)
+
+function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scratch=false)
     # Compute energy differences
-    state.ΔE .= if isnothing(state.previous_seq)
+    state.ΔE .= if isnothing(state.previous_seq) || from_scratch
         compute_energy_differences(state.seq, g) # do the calculation from scratch
     else
-        compute_energy_differences(state, g) # use the previous sequence and ΔE to help
+        # ! because the buffer of state is modified
+        compute_energy_differences!(state, g) # use the previous sequence and ΔE to help
     end
 
     # filter out inaccessible sequences (because of genetic code)
     set_accessibility_mask!(state.accessibility_mask, state.seq)
 
-
     return if step_type == :glauber
         transition_rates_glauber!(state, g)
+    elseif step_type == :metropolis
+        transition_rates_metropolis!(state, g)
+    elseif step_type == :sqrt
+        transition_rates_sqrt!(state, g)
+    else
+        throw(ArgumentError("Step type $step_type not implemented"))
     end
 end
 
 function transition_rates_glauber!(state::CTMCState, g::PottsGraph)
     # Assume that `state` has `ΔE` already computed and filtered
-    (;L, q) = size(g)
-    Q = state.qL_buffer
+    (q, L) = size(state)
     for i in 1:L, a in 1:q
-        Q[a, i] = state.accessibility_mask[a,i] ? 1/(1 + exp(state.ΔE[a, i])) : 0
+        if state.accessibility_mask[a,i]
+            state.qL_buffer[a, i] = 1/(1. + exp(state.ΔE[a, i]))
+        else
+            state.qL_buffer[a, i] = 0
+        end
     end
-    Qtot = sum(Q)
-    return Q, Qtot
+    Qtot = sum(state.qL_buffer)
+    return state.qL_buffer, Qtot
 end
+
+function transition_rates_metropolis!(state::CTMCState, g::PottsGraph)
+    # Assume that `state` has `ΔE` already computed and filtered
+    (q, L) = size(state)
+    for i in 1:L, a in 1:q
+        if state.accessibility_mask[a,i]
+            if state.ΔE[a, i] < 0
+                state.qL_buffer[a, i] = 1.
+            else
+                state.qL_buffer[a, i] = exp(-state.ΔE[a, i])
+            end
+        else
+            state.qL_buffer[a, i] = 0.
+        end
+    end
+    Qtot = sum(state.qL_buffer)
+    return state.qL_buffer, Qtot
+end
+
+function transition_rates_sqrt!(state::CTMCState, g::PottsGraph)
+    # Assume that `state` has `ΔE` already computed and filtered
+    (q, L) = size(state)
+    for i in 1:L, a in 1:q
+        if state.accessibility_mask[a,i]
+            state.qL_buffer[a, i] = exp(-0.5*state.ΔE[a, i])
+        else
+            state.qL_buffer[a, i] = 0
+        end
+    end
+    Qtot = sum(state.qL_buffer)
+    return state.qL_buffer, Qtot
+end
+
 
 """
     set_accessibility_mask!(mask::Matrix{Bool}, sequence)
 
-`mask` is a `q x L` matrix. For each position `i`, set `mask[c, i]` to `true` if and only if state `c` is accessible from `seq[i]`.
-For non codon sequences, `mask` is trivially all true.
-For `CodonSequence`, many entries are false.
+Set the accessibility mask for a sequence.
+
+# Arguments
+- `mask::Matrix{Bool}`: The mask to set.
+- `sequence`: The sequence to determine accessibility.
+
+# Returns
+The updated mask.
 """
 function set_accessibility_mask!(mask::Matrix{Bool}, seq::CodonSequence)
     for i in 1:length(seq)
         mask[:, i] .= false
-        for a in accessible_codons[seq[i]][1]
+        for a in accessible_codons(seq[i])[1]
             mask[a, i] = true
         end
     end
     return mask
 end
+
+"""
+    set_accessibility_mask!(mask::Matrix{Bool}, sequence)
+
+Set the accessibility mask for a sequence.
+
+# Arguments
+- `mask::Matrix{Bool}`: The mask to set.
+- `sequence`: The sequence to determine accessibility.
+
+# Returns
+The updated mask.
+"""
 function set_accessibility_mask!(mask::Matrix{Bool}, seq)
-    mask .= false
+    q, L = size(mask)
+    for i in 1:L, a in 1:q
+        mask[a, i] = !(sequence(seq)[i] == a) # cannot mutate to current state
+    end
     return mask
 end
 
@@ -277,13 +398,17 @@ end
 #============================================================#
 
 
-function compute_energy_differences(state::CTMCState, g::PottsGraph)
-    return compute_energy_differences(
-        state.ΔE, state.previous_seq, state.i, state.x, g; ΔE=state.qL_buffer
-    )
+# Case with using the previous sequence ~ update
+
+function compute_energy_differences!(state::CTMCState, g::PottsGraph)
+    @argcheck !isnothing(state.previous_seq) """
+    This function only accepts a state with a previous sequence.
+    """
+    return compute_energy_differences!(
+        state.qL_buffer, state.ΔE, state.previous_seq, state.i, state.x, g,
+    ) # changes the buffer and returns it
 end
 
-## General case
 """
     compute_energy_differences(
         ΔE::Vector{<:AbstractFloat},
@@ -300,20 +425,19 @@ In the first form: define the new reference `b` sequence is equal to `refseq` at
 For all mutations `(j,z)`, giving rise to sequence `c`, compute `E(c)-E(b)` and store the result in output matrix `ΔE` of dimensions `qxL`.
 Keyword argument `ΔE` can be provided to avoid allocation.
 
-
 In the second form: compute the energy difference between any sequence `b` at distance one from `a` and `a` itself.
 The output is a matrix of dimensions `qxL`, always allocated in the function.
 
 *Note*: For `CodonSequence`, the output is of size `65xL` where `L` is the length.
 Stop lead to infinite energy. Providing a reference sequence that contains a stop codon is undefined.
 """
-function compute_energy_differences(
+function compute_energy_differences!(
+    ΔE::Matrix{FloatType},
     ref_ΔE::Matrix{FloatType},
     refseq::AbstractSequence,
     i::Integer,
     x::Integer,
-    g::PottsGraph;
-    ΔE=similar(ref_ΔE),
+    g::PottsGraph,
 )
     q, L = size(ref_ΔE)
     ai = sequence(refseq)[i]
@@ -328,52 +452,30 @@ function compute_energy_differences(
                 ΔE[y,j] = ref_ΔE[y,j]
                 ΔE[y,j] += g.J[aj, x, j, i] - g.J[aj, ai, j, i]
                 ΔE[y,j] -= g.J[y, x, j, i] - g.J[y, ai, j, i]
-
             end
         end
     end
     return ΔE
 end
-
-function compute_energy_differences(refseq::AASequence, g::PottsGraph)
-    ΔE = zeros(FloatType, 21, length(refseq))
-    _compute_energy_differences!(ΔE, refseq, g)
-    return ΔE
-end
-function compute_energy_differences(refseq::NumSequence{T,q}, g::PottsGraph) where {T,q}
-    ΔE = zeros(FloatType, q, length(refseq))
-    _compute_energy_differences!(ΔE, refseq, g)
-    return ΔE
-end
-function _compute_energy_differences!(
-    ΔE_buffer::Matrix{FloatType}, refseq::AbstractSequence, g::PottsGraph;
-)
-    q, L = size(ΔE_buffer)
-    seq = copy(refseq)
-    for i in 1:L, a in 1:q
-        seq.seq[i] = a
-        ΔE_buffer[a, i] = energy(seq, g) - energy(refseq, g) # can be improved
-        seq.seq[i] = refseq.seq[i]
-    end
-    return ΔE_buffer
-end
-
-
-
-## Codon case
-function compute_energy_differences(
+function compute_energy_differences!(
+    ΔE::Matrix{FloatType},
     ref_ΔE::Matrix{FloatType},
     refseq::CodonSequence,
     i::Integer,
-    x::Integer,
-    g::PottsGraph;
-    ΔE=similar(ref_ΔE),
+    x::Integer, # codon
+    g::PottsGraph,
 )
     L = length(refseq)
-    q = 21
-    ai = refseq.aaseq[i]
-    x_aa = genetic_code(x)
+    q = IntType(21)
+    ai = refseq.aaseq[i] # previous aa at pos. i
+    x_aa = genetic_code(x) # current aa at pos. i
     for j in 1:L
+        # The calculation below considers all amino acids y_aa
+        # This is inefficient, as some amino-acids are not accessible from the current codon x
+        # However, it allows me to keep an updated ΔE matrix
+        # If considering only accessible codons, I believe one would have to eventually
+        # recompute ΔE from scratch at each step, without being able to use the ΔE from
+        # the previous sequence
         if j == i
             for y_aa in 1:q
                 codons = reverse_code(y_aa)
@@ -399,6 +501,31 @@ function compute_energy_differences(
     return ΔE
 end
 
+# Case from scratch, without using a pre-existing sequence/ΔE pairs
+
+function compute_energy_differences(refseq::AASequence, g::PottsGraph)
+    ΔE = zeros(FloatType, 21, length(refseq))
+    _compute_energy_differences!(ΔE, refseq, g)
+    return ΔE
+end
+function compute_energy_differences(refseq::NumSequence{T,q}, g::PottsGraph) where {T,q}
+    ΔE = zeros(FloatType, q, length(refseq))
+    _compute_energy_differences!(ΔE, refseq, g)
+    return ΔE
+end
+function _compute_energy_differences!(
+    ΔE_buffer::Matrix{FloatType}, refseq::AbstractSequence, g::PottsGraph;
+)
+    q, L = size(ΔE_buffer)
+    seq = copy(refseq)
+    for i in 1:L, a in 1:q
+        seq.seq[i] = a
+        ΔE_buffer[a, i] = _delta_energy(seq, refseq, i, g)
+        seq.seq[i] = refseq.seq[i]
+    end
+    return ΔE_buffer
+end
+
 function compute_energy_differences(refseq::CodonSequence, g::PottsGraph)
     q = length(codon_alphabet)
     L = length(refseq)
@@ -410,10 +537,38 @@ function compute_energy_differences(refseq::CodonSequence, g::PottsGraph)
             ΔE[c, i] = Inf
         else
             seq.aaseq[i] = genetic_code(c)
-            ΔE[c, i] = energy(seq, g) - energy(refseq, g)
-            seq.aaseq[i] = refseq.aaseq[i]
+            ΔE[c, i] = _delta_energy(seq, refseq, i, g)
+            ΔE[c, i] += sum(aa_degeneracy, seq.aaseq) - sum(aa_degeneracy, refseq.aaseq)
         end
+        seq.aaseq[i] = refseq.aaseq[i]
     end
 
     return ΔE
 end
+
+
+function _delta_energy(seq::CodonSequence, refseq::CodonSequence, i, g)
+# energy difference between seq and refseq, assuming that they differ only at i
+    dE = -g.h[seq.aaseq[i], i] + g.h[refseq.aaseq[i], i]
+    for j in 1:length(seq)
+        if j != i
+            @argcheck seq.seq[j] == refseq.seq[j]
+            dE += -g.J[seq.aaseq[i], seq.aaseq[j], i, j] + g.J[refseq.aaseq[i], seq.aaseq[j], i, j]
+        end
+    end
+    return dE
+end
+
+function _delta_energy(seq::AbstractSequence, refseq::AbstractSequence, i, g)
+    # energy difference between seq and refseq, assuming that they differ only at i
+    dE = -g.h[seq[i], i] + g.h[refseq[i], i]
+    for j in 1:length(seq)
+        if j != i
+            @argcheck seq[j] == refseq[j]
+            dE += -g.J[seq[i], seq[j], i, j] + g.J[refseq[i], seq[j], i, j]
+        end
+    end
+    return dE
+end
+
+

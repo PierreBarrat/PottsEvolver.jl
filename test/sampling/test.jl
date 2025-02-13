@@ -19,6 +19,11 @@ end
     H = map(i -> hamming(S[i - 1], S[i]; normalize=false), 2:M)
     acc_ratio_1 = sum(H) / length(H)
     @test acc_ratio_1 < 1
+
+    # The difference between two samples should be 0
+    params = SamplingParameters() # Teq=0, burnin=0
+    S, _ = mcmc_sample(g, M, params)
+    @test all(==(0), map(i -> hamming(S[i-1], S[i]),2:M))
 end
 
 @testset "Output values" begin
@@ -63,4 +68,12 @@ end
     # because g has aa_alphabet and init vector has elements > 21
     S, _ = mcmc_sample(g, M, params; init=[1, 2, 3, 22], alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.CodonSequence}
+end
+
+@testset "Fail if wrong input type" begin
+    L, q, M = (4, 21, 2)
+    g = PottsGraph(L, q; init=:rand)
+
+    params = SamplingParameters(Teq=1.5)
+    @test_throws MethodError mcmc_sample(g, M, params; init=:random_aa)
 end

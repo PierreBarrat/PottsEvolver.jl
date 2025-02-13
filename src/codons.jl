@@ -52,7 +52,7 @@ Default alphabets for `PottsEvolver`.
 """
 const codon_alphabet = let
     nt = nucleotides
-    C = vec(map(x -> Codon(x...), Iterators.product(nt, nt, nt)))
+    C = vec(map(x -> Codon(x...), Iterators.product(nt, nt, nt))) # AAA CAA GAAA etc... (first changes fastest)
     pushfirst!(C, Codon('-', '-', '-'))
     Alphabet(C, IntType)
 end
@@ -69,7 +69,7 @@ const aa_order = [
 const _genetic_code_struct = let
     code = Dict{Codon,Char}()
     i = 1
-    for a in nucleotides, b in nucleotides, c in nucleotides
+    for a in nucleotides, b in nucleotides, c in nucleotides # last changes fastest, this is ok
         code[Codon(a, b, c)] = aa_order[i]
         i += 1
     end
@@ -125,7 +125,7 @@ end
 
 Return the set of codons coding for `aa`.
 """
-reverse_code(aa::T) where {T<:Integer} = T.(_reverse_code_integers[aa])
+reverse_code(aa::T) where {T<:Integer} = _reverse_code_integers[aa]
 reverse_code(aa::AbstractChar) = _reverse_code_struct[aa]
 """
     reverse_code_rand(aa)
@@ -265,7 +265,7 @@ function _build_codon_access_map_2()
 
 
         # general case
-        accessible_codons = Int[]
+        accessible_codons = IntType[]
         # check all mutations, filter for coding codons
         for b in 1:3, nt in nucleotides
             nts = collect(bases(codon))
@@ -291,6 +291,18 @@ const _codon_access_map_2 = _build_codon_access_map_2()
 
 Return all codons/amino-acids accessible by mutating `codon` at base `b`.
 Value returned is a `Tuple` whose first/second elements represent codons/amino-acids.
+`codon` itself (and the corresponding amino-acid) is included in the result.
+
+# Examples
+```jldoctest
+julia> seq = CodonSequence([1,2,3]); # codons 1, 2, and 3
+
+julia> PottsEvolver.accessible_codons(seq[1], 1) # mutating the gap codon is undefined
+(nothing, nothing)
+
+julia> PottsEvolver.accessible_codons(seq[2], 1) # mutating codon 2 at base 1 gives access to 2 others
+UInt8[0x02, 0x03, 0x04], UInt8[0x0a, 0x0f, 0x05])
+```
 """
 function accessible_codons(codon::Integer, b::Integer)
     return get(_codon_access_map, (codon, b), (nothing, nothing))
@@ -304,6 +316,16 @@ function accessible_codons(codon::Codon, b::Integer)
     end
 end
 
+"""
+    accessible_codons(codon)
+
+Return all codons/amino-acids accessible by mutating `codon` at any base.
+Value returned is a `Tuple` whose first/second elements represent codons/amino-acids.
+`codon` itself (and the corresponding amino-acid) is **not** included in the result.
+This differs from the two argument version.
+
+All codons are considered accessible from the gap codon.
+"""
 function accessible_codons(codon::Integer)
     return get(_codon_access_map_2, codon, (nothing, nothing))
 end
