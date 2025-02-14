@@ -69,6 +69,7 @@ end
 
 Construct using keyword arguments:
 ```
+sampling_type::Symbol = :discrete
 step_type::Symbol = :gibbs
 step_meaning::Symbol = :accepted
 Teq::Int
@@ -92,7 +93,7 @@ branchlength_meaning::BranchLengthMeaning
   See `?BranchLengthMeaning` for information.
 """
 @kwdef mutable struct SamplingParameters{T<:Real}
-    sampling_type = :discrete
+    sampling_type::Symbol = :discrete
     step_type::Symbol = :gibbs
     Teq::T = Int(0)
     burnin::T = 5 * Teq
@@ -127,9 +128,17 @@ branchlength_meaning::BranchLengthMeaning
             For :discrete mcmc, `step_type` should be in $VALID_STEP_TYPES_DISCRETE.
             Instead $(step_type).
             """
-            @argcheck T <: Integer """
-            For :discrete mcmc, `Teq` should be an integer. Instead $(Teq) of type $(T).
-            """
+            if !(T <: Integer)
+                try 
+                    Teq = Int(Teq)
+                    burnin = Int(burnin)
+                catch err
+                    @error """
+                    For :discrete mcmc, `Teq` should be an integer. Instead $(Teq).
+                    """
+                    throw(err)
+                end
+            end
         elseif sampling_type == :continuous
             @argcheck step_type in VALID_STEP_TYPES_CONTINUOUS """
             For :continuous mcmc, `step_type` should be in $VALID_STEP_TYPES_CONTINUOUS.
@@ -155,4 +164,19 @@ branchlength_meaning::BranchLengthMeaning
             branchlength_meaning,
         )
     end
+end
+
+function Base.convert(::Type{SamplingParameters{T}}, params::SamplingParameters) where {T}
+    Teq = T(params.Teq)
+    burnin = T(params.burnin)
+    return SamplingParameters(
+        params.sampling_type,
+        params.step_type,
+        Teq,
+        burnin,
+        params.step_meaning,
+        params.substitution_rate,
+        params.fraction_gap_step,
+        params.branchlength_meaning,
+    )
 end

@@ -4,11 +4,11 @@
 
 """
     mcmc_steps!(
-        s::AbstractSequence, g, num_steps, p::SamplingParameters;
+        s::AbstractSequence, g, num_steps::Integer, p::SamplingParameters;
         gibbs_holder, kwargs...
     )
 
-Perform `num_steps` MCMC steps starting from sequence `s` and using graph `g`.
+Perform `num_steps` discrete MCMC steps starting from sequence `s` and using graph `g`.
 The step type (`:gibbs`, `:metropolis`) and the interpretation of `num_steps`
     (`:changed`, `:accepted`, `:proposed`) is set using `p` (see `?SamplingParameters`).
 Modifies the input sequence `s` and returns it.

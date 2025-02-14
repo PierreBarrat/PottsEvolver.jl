@@ -16,7 +16,7 @@ export read_fasta, symbols # from BioSequenceMappings
 export read_tree # from TreeTools
 
 import Base: ==, hash, isvalid
-import Base: copy, copy!, show, write
+import Base: convert, copy, copy!, show, write
 import Base: getindex, setindex!
 import Base: iterate, length, eltype, size
 
@@ -29,7 +29,7 @@ const FloatType = Float64
 
 include("codons.jl")
 export codon_alphabet, aa_alphabet, nt_alphabet
-export bases, genetic_code
+export genetic_code
 
 include("sequences.jl")
 export AbstractSequence, AASequence, CodonSequence, NumSequence

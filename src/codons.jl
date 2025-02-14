@@ -301,7 +301,7 @@ julia> PottsEvolver.accessible_codons(seq[1], 1) # mutating the gap codon is und
 (nothing, nothing)
 
 julia> PottsEvolver.accessible_codons(seq[2], 1) # mutating codon 2 at base 1 gives access to 2 others
-UInt8[0x02, 0x03, 0x04], UInt8[0x0a, 0x0f, 0x05])
+(UInt8[0x02, 0x03, 0x04], UInt8[0x0a, 0x0f, 0x05])
 ```
 """
 function accessible_codons(codon::Integer, b::Integer)
@@ -347,3 +347,37 @@ const _aa_degeneracy = Dict{IntType,FloatType}(
     a => log(length(reverse_code(a))) for a in 1:length(aa_alphabet)
 )
 aa_degeneracy(a::Integer) = get(_aa_degeneracy, a, -Inf)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

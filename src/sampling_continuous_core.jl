@@ -44,111 +44,33 @@ Base.size(state::CTMCState) = size(state.ΔE)
 ################ Main function ################
 #=============================================#
 
-function mcmc_sample_continuous_chain(
-    g::PottsGraph,
-    M::Integer,
-    s0::AbstractSequence,
-    params::SamplingParameters;
-    rng=Random.GLOBAL_RNG,
-    progress_meter=true,
-    alignment_output=true,
-    translate_output=false,
-)
-    # Argument checks
-    if !alignment_output && translate_output
-        error("I have to implement this case")
-    end
-    @unpack Teq, burnin, step_type = params
-    @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
-    tmp_check_alphabet_consistency(g, s0)
-
-    @info """
-    Sampling $M sequences using the following settings:
-        - Type of sequence = $(supertype(typeof(s0)))
-        - Time between samples = $(FloatType(Teq))
-        - burnin = $(burnin)
-        - Type of sampling = continuous
-        - Step style = $(params.step_type)
-        - Step meaning = $(params.step_meaning)
-        - fraction of gap steps (if codon) = $(params.fraction_gap_step)
-    """
-
-    @info "Initial sequence: $s0"
-
-    # vector for return value
-    conf = copy(s0)
-    S = similar([conf], M) # the sample
-    tvals = Vector{FloatType}(undef, M) # number of steps at each sample
-    # substitution_times = Vector{FloatType}(undef, 0) # time of each substitution
-
-    R = if !isnothing(params.substitution_rate)
-        @info "Using provided average model substitution rate $(params.substitution_rate)"
-        params.substitution_rate
-    else
-        @info "Computing average substitution rate for the model using discrete sampling..."
-        (;value, time) = @timed average_transition_rate(g, step_type, s0; rng, progress_meter)
-        @info "Done in $time seconds"
-        @info "Average substitution rate: $value"
-        value
-    end
-
-    # State structure for the sampling
-    state = CTMCState(conf)
-    state.R = R
-
-    # Burnin
-    @info "Initializing with burnin time $(burnin)... "
-    burnin > 0 && mcmc_steps!(state, g, Float64(params.burnin), step_type; rng) # Float to ensure this goes to the continuous version - improve it later
-    S[1] = copy(state.seq)
-    tvals[1] = burnin
-
-    # Sampling
-    log_info = []
-    progress = Progress(
-        M - 1;
-        barglyphs=BarGlyphs("[=> ]"),
-        desc="Sampling: ",
-        showspeed=true,
-        enabled=progress_meter,
-        dt=2,
+"""
+    mcmc_steps!(
+        sequence::AbstractSequence, g, Tmax::AbstractFloat, parameters::SamplingParameters; 
+        kwargs...
     )
-    @info "Sampling..."
-    time = @elapsed for m in 2:M
-        # doing Teq steps on the current configuration
-        _, number_substitutions = mcmc_steps!(state, g, Float64(Teq), step_type; rng)
-        # storing the result in S
-        S[m] = copy(state.seq)
-        tvals[m] = tvals[m - 1] + Float64(Teq)
-        # misc.
-        push!(
-            log_info, (;number_substitutions)
-        )
-        next!(progress; showvalues=[("steps", m + 1), ("total", M)])
-    end
-    @info "Sampling done in $time seconds"
+    mcmc_steps!(
+        state::CTMCState, g, Tmax::AbstractFloat, parameters::SamplingParameters; kwargs...
+    )
 
-    sequences = fmt_output(S, alignment_output, translate_output; names=tvals)
-    return (; sequences, tvals, info=log_info, params=return_params(params, s0))
-end
+Sample `g` during time `Tmax` from sequence `seq`.
+The step type is `p.step_type` (see `?SamplingParameters`).
+Modifies the input sequence `s` and returns it.
+Allocates a `CTMCState` (three matrices of order `q*L`).
 
-
+The form with `state::CTMCState` will use a pre-allocated `CTMCState` for calculations. 
+"""
 function mcmc_steps!(
-    sequence::AbstractSequence, g, Tmax::AbstractFloat, step_type; kwargs...
+    sequence::AbstractSequence, g, Tmax::AbstractFloat, parameters::SamplingParameters; 
+    kwargs...
 )
+    @argcheck parameters.sampling_type == :continuous """
+    `Tmax` is `AbstractFloat`: expected sampling type to be :continuous. 
+    Instead :$(parameters.sampling_type).
+    """
     state = CTMCState(sequence)
     return mcmc_steps!(state, g, Tmax, step_type; kwargs...)
 end
-
-"""
-    mcmc_steps!(
-        s::AbstractSequence, g, Tmax::Float64, p::SamplingParameters;
-        gibbs_holder, kwargs...
-    )
-
-Sample `g` during time `Tmax` from sequence `s`.
-The step type (`:glauber`, `:metropolis`) is set using `p` (see `?SamplingParameters`).
-Modifies the input sequence `s` and returns it.
-"""
 function mcmc_steps!(
     state::CTMCState,
     g::PottsGraph,
@@ -260,12 +182,24 @@ end
 ########################### Average transition rates ###########################
 #==============================================================================#
 
-function average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence; rng=Random.GLOBAL_RNG, progress_meter=true)
+"""
+    average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence)
+
+Compute the average transition rate for the continuous time Markov chain based on `g`. 
+`s0` is only used to initialize the CTMC and provide a type.
+"""
+function average_transition_rate(
+    g::PottsGraph, step_type, s0::AbstractSequence
+    ; rng=Random.GLOBAL_RNG, progress_meter=true
+)
     (;L) = size(g)
 
     M = 100
     params = SamplingParameters(Teq = L*10) # default continuous sampling parameters
-    sample_discrete = mcmc_sample(g, M, params; alignment_output=false, init=s0, rng=rng, progress_meter=progress_meter).sequences
+    sample_discrete = mcmc_sample(
+        g, M, params; 
+        alignment_output=false, init=s0, rng=rng, progress_meter=progress_meter
+    ).sequences
     state = CTMCState(sample_discrete[1])
     Rmean = mean(sample_discrete) do sequence
         copy!(state.seq, sequence)
@@ -280,7 +214,24 @@ end
 ############################ Transition rates ############################
 #========================================================================#
 
+"""
+    transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
 
+Compute the transition rate matrix for the sequence `sequence`.
+Return the a `q` by `L` matrix `Q` and the total rate `R`.
+Allocates a `CTMCState`. 
+"""
+function transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
+    state = CTMCState(sequence)
+    return transition_rates!(state, g, step_type)
+end
+
+"""
+    transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scratch=false)
+
+Compute the transition rate matrix for the sequence `state.seq`.
+Return the a `q` by `L` matrix `Q` and the total rate `R`. 
+"""
 function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scratch=false)
     # Compute energy differences
     state.ΔE .= if isnothing(state.previous_seq) || from_scratch

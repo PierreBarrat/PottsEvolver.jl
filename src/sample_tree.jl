@@ -5,6 +5,20 @@ end
 
 Base.copy(S::Sequence) = Sequence(copy(S.seq))
 
+#= 
+The functions mcmc_sample_tree and mcmc_sample_tree! need to be duplicated for the continuous case
+In fact, everything that calls mcmc_steps! needs to be duplicated
+Necessary: mcmc_steps! takes a CTMCState as a first argument, which should be allocated only once
+not super trivial actually: the CTMCState needs to be memorized for each internal node ... 
+- one ref CTMCState for the parent
+- one buffer CTMCState for the child, re-used for each child after being re-copied from the parent
+
+or
+
+- one CTMCState for the whole algorithm
+- when we start a chain, from parent --> child, initialize it from scratch from parent. Maybe simpler (but more comp. for sure). 
+=#
+
 """
     mcmc_sample_tree(g::PottsGraph, tree::Tree, rootseq::AbstractSequence, params; kwargs...)
     mcmc_sample_tree(g::PottsGraph, tree::Tree, params::SamplingParameters; init, kwargs...)
@@ -45,7 +59,7 @@ function mcmc_sample_tree(
     return mcmc_sample_tree!(g, tree_copy, params; kwargs...) # returns tree_copy
 end
 """
-    mcmc_sample_main!(
+    mcmc_sample_tree!(
         g::PottsGraph, tree::Tree{<:Sequence{S}}, params::SamplingParameters;
         rng=Random.GLOBAL_RNG,
     ) where S <: AbstractSequence
