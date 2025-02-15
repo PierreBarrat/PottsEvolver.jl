@@ -101,7 +101,9 @@ Build a `CodonSequence` from `seq`:
 """
 function CodonSequence(seq::AbstractVector{T}; source=:codon) where {T<:Integer}
     return if source == :aa
-        CodonSequence(map(reverse_code_rand, seq), convert(Vector{T}, seq))
+        CodonSequence(
+            convert(Vector{T}, map(reverse_code_rand, seq)), convert(Vector{T}, seq)
+        )
     elseif source == :codon
         aaseq = map(genetic_code, seq)
         any(isnothing, aaseq) && error("""

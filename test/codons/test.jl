@@ -21,10 +21,12 @@ end
 @testset "Valid/Gap/Invalid codons" begin
     stop_codons = ["TAA", "TAG", "TGA"]
     for codon in symbols(codon_alphabet)
-        @test in(prod(bases(codon)), stop_codons) == PottsEvolver.isstop(codon)
-        # Codons made of only nucleotides are always valid
-        @test PottsEvolver.isvalid(codon) ==
-            (all(in(['A', 'C', 'G', 'T']), bases(codon)) || all(==('-'), bases(codon)))
+        # Check PottsEvolver.isstop
+        @test in(prod(PottsEvolver.bases(codon)), stop_codons) == PottsEvolver.isstop(codon)
+        # Check PottsEvolver.isvalid
+        all_nt = all(in(['A', 'C', 'G', 'T']), PottsEvolver.bases(codon))
+        all_gaps = all(==('-'), PottsEvolver.bases(codon))
+        @test PottsEvolver.isvalid(codon) == (all_nt || all_gaps)
     end
 end
 
