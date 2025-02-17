@@ -5,7 +5,7 @@
 const VALID_STEP_TYPES = [:gibbs, :metropolis, :glauber, :sqrt]
 const VALID_STEP_MEANINGS = [:proposed, :accepted, :changed]
 const VALID_STEP_TYPES_CONTINUOUS = [:metropolis, :glauber, :sqrt]
-const VALID_STEP_TYPES_DISCRETE = [:gibbs, :metropolis]
+const VALID_STEP_TYPES_DISCRETE = [:gibbs]
 
 """
 ```
@@ -71,26 +71,52 @@ Construct using keyword arguments:
 ```
 sampling_type::Symbol = :discrete
 step_type::Symbol = :gibbs
-step_meaning::Symbol = :accepted
-Teq::Int
-burnin::Int = 5*Teq
-fraction_gap_step::Float64 = 0.9
-branchlength_meaning::BranchLengthMeaning
+Teq::Real = 0
+burnin::Real = 5*Teq
+step_meaning::Symbol = :accepted # relevant for :discrete
+fraction_gap_step::Float64 = 0.9 # relevant for :discrete and codon sampling
+branchlength_meaning::BranchLengthMeaning # relevant for :discrete and sampling on a tree
+substitution_rate::Union{Nothing,Float64} = nothing # relevant for :continuous
 ```
 
-- `Teq` is measured in swaps: attempted (or accepted) change of one sequence position.
-- `burnin`: number of steps starting from the initial sequence before the first `Teq` are
-    made.
-- `step_meaning` is only relevant for discrete sampling. It can take three values
+`sampling_type` can be `:discrete` or `:continuous`.
+The time between samples is `Teq`, and an extra time `burnin` is taken before the first sample. 
+Allowed values of `step_type` differ between the continuous and discrete cases. 
+
+## Discrete sampling
+- `Teq` is measured in swaps: accepted (or attempted) changes of one sequence position.
+  It must be an integer.
+- `burnin`: number of steps starting from the initial sequence before the first sample. 
+  Must be an integer. 
+- `step_type`: `:gibbs` only. I intend to implement `:metropolis` and maybe `:glauber`.
+- `step_meaning` (:discrete only): whether a swap count towards equilibration or not. 
+  It can take three values
     - `:proposed`: all mcmc steps count towards equilibration
     - `:accepted`: only accepted steps count (all steps for non-codon Gibbs)
     - `:changed`: only steps that lead to a change count (Gibbs can resample the same state)
     *Note*: Gibbs steps for codons are more complicated, since they involve the possibility
     Metropolis step for gaps, which can be rejected.
 
-- `fraction_gap_step` is only relevant for discrete sampling with codons.
-- `branchlength_meaning` is only useful if you sample along branches of a tree.
-  See `?BranchLengthMeaning` for information.
+- `fraction_gap_step`: fraction of `:metropolis` steps concerning gaps when sampling with 
+  codons. This is only relevant for discrete sampling with codons.
+- `branchlength_meaning`: how branch-lengths on a tree must be converted to swaps. 
+    See `?BranchLengthMeaning` for information.
+    This is only useful if you sample along branches of a tree.
+
+
+## Continuous sampling
+
+For continuous sampling, there is no notion of swap/sweep or of accepted/rejected steps. 
+Since any positive real number is acceptable as a sampling time, branch lenghts of trees 
+can be used directly. 
+
+- `Teq` and `burnin` are floats. 
+- `step_type` can be `:metropolis`, `:glauber` or `:sqrt`.
+- `substitution_rate` is the average substitution rate for a given Potts model  
+  (the average runs over sequences). 
+  It is the result of `average_substitution_rate`. 
+  This is computed automatically if not provided (but takes some time).
+
 """
 @kwdef mutable struct SamplingParameters{T<:Real}
     sampling_type::Symbol = :discrete
@@ -99,12 +125,12 @@ branchlength_meaning::BranchLengthMeaning
     burnin::T = 5 * Teq
     # for discrete sampling only
     step_meaning::Symbol = :accepted
-    # for continuous sampling only - average substitution rate for a given Potts model
-    substitution_rate::Union{Nothing,FloatType} = nothing
     # for the discrete codon algorithm (Gibbs for aa and Metropolis for gaps)
     fraction_gap_step::Float64 = 0.9
     # when sampling on trees
     branchlength_meaning::BranchLengthMeaning = BranchLengthMeaning(:step, :exact)
+    # for continuous sampling only - average substitution rate for a given Potts model
+    substitution_rate::Union{Nothing,Float64} = nothing
     function SamplingParameters(
         sampling_type,
         step_type,

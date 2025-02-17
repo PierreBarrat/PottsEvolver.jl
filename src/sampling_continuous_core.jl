@@ -53,12 +53,14 @@ Base.size(state::CTMCState) = size(state.ΔE)
         state::CTMCState, g, Tmax::AbstractFloat, parameters::SamplingParameters; kwargs...
     )
 
-Sample `g` during time `Tmax` from sequence `seq`.
+Sample `g` during time `Tmax` (continuous) from sequence `seq`.
 The step type is `p.step_type` (see `?SamplingParameters`).
 Modifies the input sequence `s` and returns it.
 Allocates a `CTMCState` (three matrices of order `q*L`).
 
-The form with `state::CTMCState` will use a pre-allocated `CTMCState` for calculations. 
+## Notes
+- The form with `state::CTMCState` will use a pre-allocated `CTMCState` for calculations. 
+- Expects `parameters.sampling_type` to be `:continuous`. Fails if otherwise. 
 """
 function mcmc_steps!(
     sequence::AbstractSequence, g, Tmax::AbstractFloat, parameters::SamplingParameters; 
@@ -183,10 +185,10 @@ end
 #==============================================================================#
 
 """
-    average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence)
+    average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence; kwargs...)
 
 Compute the average transition rate for the continuous time Markov chain based on `g`. 
-`s0` is only used to initialize the CTMC and provide a type.
+`s0` is only used to initialize the `CTMCState` and provide a type. 
 """
 function average_transition_rate(
     g::PottsGraph, step_type, s0::AbstractSequence
