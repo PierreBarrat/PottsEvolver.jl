@@ -237,9 +237,10 @@ Return the a `q` by `L` matrix `Q` and the total rate `R`.
 function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scratch=false)
     # Compute energy differences
     state.ΔE .= if isnothing(state.previous_seq) || from_scratch
-        compute_energy_differences(state.seq, g) # do the calculation from scratch
+        # do the calculation from scratch, using the buffer to avoid allocation
+        compute_energy_differences!(state.qL_buffer, state.seq, g) 
     else
-        # ! because the buffer of state is modified
+        # `!` because the buffer of state is modified
         compute_energy_differences!(state, g) # use the previous sequence and ΔE to help
     end
 
@@ -455,21 +456,39 @@ function compute_energy_differences!(
 end
 
 # Case from scratch, without using a pre-existing sequence/ΔE pairs
+"""
+    compute_energy_differences(refseq::AbstractSequence, g::PottsGraph)
 
+Compute the energy differences between `refseq` and neighbouring sequences.
+Return a matrix of dimensions `q` by `L`.
+"""
 function compute_energy_differences(refseq::AASequence, g::PottsGraph)
     ΔE = zeros(FloatType, 21, length(refseq))
-    _compute_energy_differences!(ΔE, refseq, g)
-    return ΔE
+    return compute_energy_differences!(ΔE, refseq, g)
 end
 function compute_energy_differences(refseq::NumSequence{T,q}, g::PottsGraph) where {T,q}
     ΔE = zeros(FloatType, q, length(refseq))
-    _compute_energy_differences!(ΔE, refseq, g)
-    return ΔE
+    return compute_energy_differences!(ΔE, refseq, g)
 end
-function _compute_energy_differences!(
-    ΔE_buffer::Matrix{FloatType}, refseq::AbstractSequence, g::PottsGraph;
+function compute_energy_differences(refseq::CodonSequence, g::PottsGraph)
+    q = length(codon_alphabet)
+    L = length(refseq)
+    ΔE = zeros(Float64, q, L)
+    return compute_energy_differences!(ΔE, refseq, g)
+end
+
+"""
+    compute_energy_differences!(
+        ΔE::Matrix{FloatType}, refseq::AbstractSequence, g::PottsGraph;
+    )
+
+Compute the energy differences between `refseq` and neighbouring sequences, storing result 
+in pre-allocated matrix ΔE. 
+"""
+function compute_energy_differences!(
+    ΔE::Matrix{FloatType}, refseq::AbstractSequence, g::PottsGraph;
 )
-    q, L = size(ΔE_buffer)
+    q, L = size(ΔE)
     seq = copy(refseq)
     for i in 1:L, a in 1:q
         seq.seq[i] = a
@@ -478,12 +497,10 @@ function _compute_energy_differences!(
     end
     return ΔE_buffer
 end
-
-function compute_energy_differences(refseq::CodonSequence, g::PottsGraph)
-    q = length(codon_alphabet)
-    L = length(refseq)
-    ΔE = zeros(Float64, q, L)
-
+function compute_energy_differences!(
+    ΔE::Matrix{FloatType}, refseq::CodonSequence, g::PottsGraph;
+)
+    (q, L) = size(ΔE)
     seq = copy(refseq)
     for i in 1:L, c in 1:q
         if isstop(c)
@@ -500,13 +517,16 @@ function compute_energy_differences(refseq::CodonSequence, g::PottsGraph)
 end
 
 
+
+
 function _delta_energy(seq::CodonSequence, refseq::CodonSequence, i, g)
 # energy difference between seq and refseq, assuming that they differ only at i
     dE = -g.h[seq.aaseq[i], i] + g.h[refseq.aaseq[i], i]
     for j in 1:length(seq)
         if j != i
             @argcheck seq.seq[j] == refseq.seq[j]
-            dE += -g.J[seq.aaseq[i], seq.aaseq[j], i, j] + g.J[refseq.aaseq[i], seq.aaseq[j], i, j]
+            dE += -g.J[seq.aaseq[i], seq.aaseq[j], i, j]
+            dE += g.J[refseq.aaseq[i], seq.aaseq[j], i, j]
         end
     end
     return dE

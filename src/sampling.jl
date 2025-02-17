@@ -69,7 +69,7 @@ end
 #=================================================================================#
 
 """
-    mcmc_sample(g, tree, M=1, params; alignment_output, translate_output, kwargs...)
+    mcmc_sample(g, tree, M=1, params; alignment_output, translate_output, init, kwargs...)
 
 Sample `g` along branches of `tree`.
 Repeat the process `M` times, returning an array of named tuples of the form
@@ -88,7 +88,7 @@ will contain the amino acid sequence and not the codons.
 ## Warning
 The `Teq` field of `params` is not used in the sampling.
 However, the `burnin` field will be used to set the root sequence: `burnin` mcmc steps
-will be performed starting from the input sequence, and the result is set at the root.
+will be performed starting from the input sequence, and the result is placed at the root.
 If you want a precise root sequence to be used, set `burnin=0` in `params`.
 """
 function mcmc_sample(

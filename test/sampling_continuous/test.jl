@@ -89,8 +89,27 @@
     end
 end
 
+@testset "transition rates" begin
+    L = 3
+    q = 21
+    g = PottsGraph(L, q; init=:rand)
 
+    @testset "CodonSequence" begin
+        # Testing all three ways to compute transition rates
+        # - working on a pre-allocated CTMCState
+        # - from scratch, but still using the buffer from the CTMCState
+        # - from an uninitialized CTMCState 
+        refseq = CodonSequence([1, 2, 3])
+        state = PottsEvolver.CTMCState(refseq)
 
+        Q1, R1 = PottsEvolver.transition_rates!(state, g, :glauber)
+        Q2, R2 = PottsEvolver.transition_rates!(state, g, :glauber; from_scratch=true)
+        state.previous_seq = nothing
+        Q3, R3 = PottsEvolver.transition_rates!(state, g, :glauber)
 
-
-
+        @test Q1 ≈ Q2
+        @test Q2 ≈ Q3
+        @test R1 ≈ R2
+        @test R2 ≈ R3
+    end
+end
