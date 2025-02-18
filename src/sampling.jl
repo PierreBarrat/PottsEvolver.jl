@@ -93,7 +93,7 @@ If you want a precise root sequence to be used, set `burnin=0` in `params`.
 """
 function mcmc_sample(
     g,
-    tree,
+    tree::Tree,
     params;
     verbose=0,
     logfile=nothing,
@@ -105,7 +105,15 @@ function mcmc_sample(
     logger = get_logger(verbose, logfile, logfile_verbose)
     with_logger(logger) do
         # Actual MCMC
-        sampled_tree = mcmc_sample_tree(g, tree, params; kwargs...)
+        sampled_tree = if params.sampling_type == :continuous
+            params = convert(SamplingParameters{FloatType}, params)
+            mcmc_sample_continuous_tree(g, tree, params; kwargs...)
+        elseif params.sampling_type == :discrete
+            params = convert(SamplingParameters{Int}, params)
+            mcmc_sample_tree(g, tree, params; kwargs...)
+        else
+            throw(ArgumentError("Invalid sampling type: $(params.sampling_type)"))
+        end
 
         leaf_names = map(label, traversal(sampled_tree, :postorder; internals=false))
         internal_names = map(label, traversal(sampled_tree, :postorder; leaves=false))
@@ -133,7 +141,7 @@ function mcmc_sample(
         )
     end
 end
-function mcmc_sample(g, tree, M::Int, params; kwargs...)
+function mcmc_sample(g, tree::Tree, M::Int, params; kwargs...)
     # M sequences per node --> [(tree, leaf, internals)] of length `M`
     return [mcmc_sample(g, tree, params; kwargs...) for _ in 1:M]
 end

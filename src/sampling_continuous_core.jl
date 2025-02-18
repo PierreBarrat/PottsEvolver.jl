@@ -71,7 +71,7 @@ function mcmc_steps!(
     Instead :$(parameters.sampling_type).
     """
     state = CTMCState(sequence)
-    return mcmc_steps!(state, g, Tmax, step_type; kwargs...)
+    return mcmc_steps!(state, g, Tmax, parameters.step_type; kwargs...)
 end
 function mcmc_steps!(
     state::CTMCState,
@@ -492,10 +492,10 @@ function compute_energy_differences!(
     seq = copy(refseq)
     for i in 1:L, a in 1:q
         seq.seq[i] = a
-        ΔE_buffer[a, i] = _delta_energy(seq, refseq, i, g)
+        ΔE[a, i] = _delta_energy(seq, refseq, i, g)
         seq.seq[i] = refseq.seq[i]
     end
-    return ΔE_buffer
+    return ΔE
 end
 function compute_energy_differences!(
     ΔE::Matrix{FloatType}, refseq::CodonSequence, g::PottsGraph;
@@ -516,9 +516,6 @@ function compute_energy_differences!(
     return ΔE
 end
 
-
-
-
 function _delta_energy(seq::CodonSequence, refseq::CodonSequence, i, g)
 # energy difference between seq and refseq, assuming that they differ only at i
     dE = -g.h[seq.aaseq[i], i] + g.h[refseq.aaseq[i], i]
@@ -531,7 +528,6 @@ function _delta_energy(seq::CodonSequence, refseq::CodonSequence, i, g)
     end
     return dE
 end
-
 function _delta_energy(seq::AbstractSequence, refseq::AbstractSequence, i, g)
     # energy difference between seq and refseq, assuming that they differ only at i
     dE = -g.h[seq[i], i] + g.h[refseq[i], i]

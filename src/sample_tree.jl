@@ -1,24 +1,116 @@
 # just a wrapper to have <:TreeNodeData
 @kwdef struct Sequence{T<:AbstractSequence} <: TreeNodeData
-    seq::T = T(0)
+    seq::T = T(0) # sequence of null length as init.
 end
 
 Base.copy(S::Sequence) = Sequence(copy(S.seq))
 
-#= 
-The functions mcmc_sample_tree and mcmc_sample_tree! need to be duplicated for the continuous case
-In fact, everything that calls mcmc_steps! needs to be duplicated
-Necessary: mcmc_steps! takes a CTMCState as a first argument, which should be allocated only once
-not super trivial actually: the CTMCState needs to be memorized for each internal node ... 
-- one ref CTMCState for the parent
-- one buffer CTMCState for the child, re-used for each child after being re-copied from the parent
 
-or
+#================================#
+########### CONTINUOUS ###########
+#================================#
+"""
+    mcmc_sample_continuous_tree(g::PottsGraph, tree::Tree, rootseq::AbstractSequence, params; kwargs...)
+    mcmc_sample_continuous_tree(g::PottsGraph, tree::Tree, params::SamplingParameters; init, kwargs...)
 
-- one CTMCState for the whole algorithm
-- when we start a chain, from parent --> child, initialize it from scratch from parent. Maybe simpler (but more comp. for sure). 
-=#
+Sample `g` along `tree`, using branch lengths to set the number of steps.
+Return a sampled copy `tree`.
+- If `rootseq` is supplied, use it as the root of the tree.
+- If not, then the `init` kwarg will be used, see `PottsEvolver.get_init_sequence` to
+  pick a root sequence. 
+  The field `params.burnin` is used to perform initial equilibration of the
+  root sequence (useful if *e.g.* `init=:random_codon`).
+  The code then falls back on the first form.
+"""
+function mcmc_sample_continuous_tree(
+    g::PottsGraph, tree::Tree, params::SamplingParameters; init=:random_num, kwargs...
+)
+    # Pick initial sequence
+    s0 = get_init_sequence(init, g)
+    # If burnin, then equilibrate the picked sequence first
+    @unpack burnin = params
+    if burnin > 0
+        @info "Equilibrating root sequence with $(burnin) burnin steps... "
+        gibbs_holder = get_gibbs_holder(s0)
+        time = @elapsed mcmc_steps!(s0, g, Float64(burnin), params; kwargs...) # Float(burnin) to ensure this goes to the continuous version
+        @info "done in $time seconds"
+    end
 
+    # Sample and return the tree
+    return mcmc_sample_continuous_tree(g, tree, s0, params; kwargs...)
+end
+function mcmc_sample_continuous_tree(
+    g::PottsGraph,
+    tree::Tree,
+    rootseq::AbstractSequence,
+    params::SamplingParameters;
+    kwargs...,
+)
+    tree_copy = prepare_tree(tree, rootseq)
+    return mcmc_sample_continuous_tree!(g, tree_copy, params; kwargs...) # returns tree_copy
+end
+
+"""
+    mcmc_sample_continuous_tree!(g::PottsGraph, tree::Tree, params; kwargs...)
+
+Sample one sequence per node of `tree`.
+Expects `tree` to have a root sequence.
+"""
+function mcmc_sample_continuous_tree!(
+    g::PottsGraph,
+    tree::Tree{<:Sequence{S}},
+    params::SamplingParameters;
+    rng=Random.GLOBAL_RNG,
+) where {S <: AbstractSequence}
+    tmp_check_alphabet_consistency(g, data(root(tree)).seq)
+    @argcheck params.sampling_type == :continuous
+
+    # logging & warnings
+    let
+        M = length(leaves(tree))
+        s0 = data(root(tree)).seq
+        @info """
+        Sampling sequences of tree with $M leaves using the following settings:
+            - type of sampling = `:continuous`
+            - type of sequence = $(typeof(s0))
+            - step style = $(params.step_type)
+        """
+    end
+
+    @unpack Teq, burnin = params
+    Teq > 0 && @info "Sampling on a tree: `Teq` field in parameters is ignored" Teq
+
+    # some settings
+    state = CTMCState(data(root(tree)).seq)
+
+    # Sampling
+    time = @elapsed sample_children_continuous!(root(tree), g, params, state; rng)
+    @info "Sampling done in $time seconds"
+
+    return tree
+end
+
+function sample_children_continuous!(
+    node::TreeNode{<:Sequence}, g, params, state::CTMCState; kwargs...
+)
+    for c in children(node)
+        # copy the ancestral sequence
+        s0 = copy(data(node).seq)
+        # mcmc using it as an init
+        state.seq = s0 # state is uninitialised, this just avoids allocation
+        state.previous_seq = nothing # to make sure not to take state seriously
+        mcmc_steps!(state, g, branch_length(c), params.step_type; kwargs...)
+        # copy result to child
+        data!(c, Sequence(state.seq))
+        # recursive
+        sample_children_continuous!(c, g, params, state; kwargs...)
+    end
+    return nothing
+end
+
+#==========================#
+######### DISCRETE #########
+#==========================#
 """
     mcmc_sample_tree(g::PottsGraph, tree::Tree, rootseq::AbstractSequence, params; kwargs...)
     mcmc_sample_tree(g::PottsGraph, tree::Tree, params::SamplingParameters; init, kwargs...)
@@ -27,9 +119,10 @@ Sample `g` along `tree`, using branch lengths to set the number of steps.
 Return a sampled copy `tree`.
 - If `rootseq` is supplied, use it as the root of the tree.
 - If not, then the `init` kwarg will be used, see `PottsEvolver.get_init_sequence` to
-  pick a root sequence. The code then falls back on the first form.
-  The field `params.burnin` is then used to perform initial equilibration of the
-    root sequence (useful if *e.g.* `init=:random_codon`)
+  pick a root sequence. 
+  The field `params.burnin` is used to perform initial equilibration of the
+  root sequence (useful if *e.g.* `init=:random_codon`).
+  The code then falls back on the first form.
 """
 function mcmc_sample_tree(
     g::PottsGraph, tree::Tree, params::SamplingParameters; init=:random_num, kwargs...
@@ -58,15 +151,15 @@ function mcmc_sample_tree(
     tree_copy = prepare_tree(tree, rootseq)
     return mcmc_sample_tree!(g, tree_copy, params; kwargs...) # returns tree_copy
 end
+
 """
     mcmc_sample_tree!(
         g::PottsGraph, tree::Tree{<:Sequence{S}}, params::SamplingParameters;
         rng=Random.GLOBAL_RNG,
     ) where S <: AbstractSequence
 
-Sample one sequence per node of `tree`.
-Expects that `tree` is already "ready": it has a non empty root sequence, and branch
-lengths are integers.
+Sample one sequence per node of `tree`, and return `tree`.
+Expects a "prepared" tree with a non empty root sequence.
 """
 function mcmc_sample_tree!(
     g::PottsGraph,
@@ -75,6 +168,7 @@ function mcmc_sample_tree!(
     rng=Random.GLOBAL_RNG,
 ) where {S<:AbstractSequence}
     tmp_check_alphabet_consistency(g, data(root(tree)).seq)
+    @argcheck params.sampling_type == :discrete 
 
     # logging & warnings
     let
@@ -82,6 +176,7 @@ function mcmc_sample_tree!(
         s0 = data(root(tree)).seq
         @info """
         Sampling sequences of tree with $M leaves using the following settings:
+            - type of sampling = `:discrete`
             - type of sequence = $(typeof(s0))
             - step style = $(params.step_type)
             - step meaning = $(params.step_meaning)
@@ -121,6 +216,7 @@ function sample_children!(node::TreeNode{<:Sequence}, g, params, gibbs_holder; k
     end
     return nothing
 end
+
 
 #=====================#
 ######## Utils ########
