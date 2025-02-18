@@ -80,8 +80,19 @@ function mcmc_sample_continuous_tree!(
     @unpack Teq, burnin = params
     Teq > 0 && @info "Sampling on a tree: `Teq` field in parameters is ignored" Teq
 
-    # some settings
-    state = CTMCState(data(root(tree)).seq)
+    # Setting the CTMCState
+    rootseq = data(root(tree)).seq
+    state = CTMCState(rootseq)
+    state.R = if !isnothing(params.substitution_rate)
+        @info "Using provided average model substitution rate $(params.substitution_rate)"
+        params.substitution_rate
+    else
+        @info "Computing average substitution rate for the model using discrete sampling..."
+        (;value, time) = @timed average_transition_rate(g, params.step_type, rootseq; rng)
+        @info "Done in $time seconds"
+        @info "Average substitution rate: $value"
+        value
+    end
 
     # Sampling
     time = @elapsed sample_children_continuous!(root(tree), g, params, state; rng)

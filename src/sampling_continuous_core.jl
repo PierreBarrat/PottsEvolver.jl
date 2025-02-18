@@ -102,8 +102,6 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
 
     t = 0
     while true
-        # @info "START"
-
         state.ΔE_copy .= state.ΔE # memorize the old ΔE in case no move is made
 
         # compute transition rates and scaled substitution rate
@@ -146,7 +144,6 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
         # do the substitution
         gillespie_substitute!(state, i, a)
         n_substitutions += 1
-        # @info "DONE"
     end
 
     # return times
