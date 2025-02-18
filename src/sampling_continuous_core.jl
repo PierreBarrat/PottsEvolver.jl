@@ -105,7 +105,8 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
         state.ΔE_copy .= state.ΔE # memorize the old ΔE in case no move is made
 
         # compute transition rates and scaled substitution rate
-        Q, R = transition_rates!(state, g, step_type)
+        Q = transition_rates!(state, g, step_type)
+        R = sum(Q)
         @assert R > 0 "Something went wrong in gillespie: null total rate"
         R_scaled = isnothing(state.R) ? R : R/state.R*L
 
@@ -140,7 +141,6 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
             end
         end
         @assert a > 0 && i > 0 "Something went wrong in gillespie: no substitution chosen"
-
         # do the substitution
         gillespie_substitute!(state, i, a)
         n_substitutions += 1
@@ -202,8 +202,7 @@ function average_transition_rate(
     state = CTMCState(sample_discrete[1])
     Rmean = mean(sample_discrete) do sequence
         copy!(state.seq, sequence)
-        Q, R = transition_rates!(state, g, step_type)
-        R
+        sum(transition_rates!(state, g, step_type))
     end
 
     return Rmean
@@ -258,21 +257,20 @@ end
 function transition_rates_glauber!(state::CTMCState, g::PottsGraph)
     # Assume that `state` has `ΔE` already computed and filtered
     (q, L) = size(state)
-    for i in 1:L, a in 1:q
+    @inbounds for i in 1:L, a in 1:q
         if state.accessibility_mask[a,i]
             state.qL_buffer[a, i] = 1/(1. + exp(state.ΔE[a, i]))
         else
-            state.qL_buffer[a, i] = 0
+            state.qL_buffer[a, i] = 0.
         end
     end
-    Qtot = sum(state.qL_buffer)
-    return state.qL_buffer, Qtot
+    return state.qL_buffer
 end
 
 function transition_rates_metropolis!(state::CTMCState, g::PottsGraph)
     # Assume that `state` has `ΔE` already computed and filtered
     (q, L) = size(state)
-    for i in 1:L, a in 1:q
+    @inbounds for i in 1:L, a in 1:q
         if state.accessibility_mask[a,i]
             if state.ΔE[a, i] < 0
                 state.qL_buffer[a, i] = 1.
@@ -283,22 +281,20 @@ function transition_rates_metropolis!(state::CTMCState, g::PottsGraph)
             state.qL_buffer[a, i] = 0.
         end
     end
-    Qtot = sum(state.qL_buffer)
-    return state.qL_buffer, Qtot
+    return state.qL_buffer
 end
 
 function transition_rates_sqrt!(state::CTMCState, g::PottsGraph)
     # Assume that `state` has `ΔE` already computed and filtered
     (q, L) = size(state)
-    for i in 1:L, a in 1:q
+    @inbounds for i in 1:L, a in 1:q
         if state.accessibility_mask[a,i]
             state.qL_buffer[a, i] = exp(-0.5*state.ΔE[a, i])
         else
             state.qL_buffer[a, i] = 0
         end
     end
-    Qtot = sum(state.qL_buffer)
-    return state.qL_buffer, Qtot
+    return state.qL_buffer
 end
 
 
@@ -392,16 +388,17 @@ function compute_energy_differences!(
 )
     q, L = size(ref_ΔE)
     ai = sequence(refseq)[i]
-    for j in 1:L
+    ΔE .= ref_ΔE
+    @inbounds for j in 1:L
         if j == i
             for y in 1:q
-                ΔE[y,i] = ref_ΔE[y,i] - ref_ΔE[x,i]
+                ΔE[y,i] -= ref_ΔE[x,i]
             end
         else
             aj = sequence(refseq)[j]
+            dJ = g.J[aj, x, j, i] - g.J[aj, ai, j, i]
             for y in 1:q
-                ΔE[y,j] = ref_ΔE[y,j]
-                ΔE[y,j] += g.J[aj, x, j, i] - g.J[aj, ai, j, i]
+                ΔE[y,j] += dJ
                 ΔE[y,j] -= g.J[y, x, j, i] - g.J[y, ai, j, i]
             end
         end

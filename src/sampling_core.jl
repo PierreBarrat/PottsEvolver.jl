@@ -212,7 +212,7 @@ end
 function gibbs_step!(
     s::AbstractSequence,
     g::PottsGraph,
-    p::SamplingParameters,
+    p::SamplingParameters, # not actually used, but the CodonSequence case needs it
     gibbs_holder;
     rng=Random.GLOBAL_RNG,
 )

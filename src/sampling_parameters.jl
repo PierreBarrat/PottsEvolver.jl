@@ -149,7 +149,7 @@ can be used directly.
         end
 
         @argcheck sampling_type in (:discrete, :continuous)
-        if sampling_type == :discrete
+        Type = if sampling_type == :discrete
             @argcheck step_type in VALID_STEP_TYPES_DISCRETE """
             For :discrete mcmc, `step_type` should be in $VALID_STEP_TYPES_DISCRETE.
             Instead $(step_type).
@@ -165,11 +165,13 @@ can be used directly.
                     throw(err)
                 end
             end
+            Int
         elseif sampling_type == :continuous
             @argcheck step_type in VALID_STEP_TYPES_CONTINUOUS """
             For :continuous mcmc, `step_type` should be in $VALID_STEP_TYPES_CONTINUOUS.
             Instead $(step_type).
             """
+            Float64
         end
 
         @argcheck step_meaning in VALID_STEP_MEANINGS """
@@ -179,7 +181,7 @@ can be used directly.
 
         @argcheck isnothing(substitution_rate) || substitution_rate > 0
 
-        return new{T}(
+        return new{Type}(
             sampling_type,
             step_type,
             Teq,
