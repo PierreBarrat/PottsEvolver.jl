@@ -120,7 +120,7 @@ can be used directly.
 """
 @kwdef mutable struct SamplingParameters{T<:Real}
     sampling_type::Symbol = :discrete
-    step_type::Symbol = :gibbs
+    step_type::Symbol = (sampling_type == :discrete ? :gibbs : :glauber)
     Teq::T = Int(0)
     burnin::T = 5 * Teq
     # for discrete sampling only
@@ -137,9 +137,9 @@ can be used directly.
         Teq::T,
         burnin::T,
         step_meaning,
-        substitution_rate,
         fraction_gap_step,
         branchlength_meaning,
+        substitution_rate,
     ) where {T}
         step_meaning = try
             Symbol(step_meaning)
@@ -185,9 +185,9 @@ can be used directly.
             Teq,
             burnin,
             step_meaning,
-            substitution_rate,
             fraction_gap_step,
             branchlength_meaning,
+            substitution_rate,
         )
     end
 end
@@ -201,8 +201,29 @@ function Base.convert(::Type{SamplingParameters{T}}, params::SamplingParameters)
         Teq,
         burnin,
         params.step_meaning,
-        params.substitution_rate,
         params.fraction_gap_step,
         params.branchlength_meaning,
+        params.substitution_rate,
     )
 end
+
+function Base.show(io::IO, params::SamplingParameters)
+    println(io, "SamplingParameters:")
+    println(io, "  sampling_type = :$(params.sampling_type)")
+    println(io, "  step_type = :$(params.step_type)")
+    println(io, "  Teq = $(params.Teq)")
+    println(io, "  burnin = $(params.burnin)")
+    
+    if params.sampling_type == :discrete
+        println(io, "  step_meaning = :$(params.step_meaning)")
+        println(io, "  fraction_gap_step = $(params.fraction_gap_step)")
+        println(io, "  branchlength_meaning = BranchLengthMeaning(:$(params.branchlength_meaning.type), :$(params.branchlength_meaning.length))")
+    elseif params.sampling_type == :continuous
+        if !isnothing(params.substitution_rate)
+            println(io, "  substitution_rate = $(params.substitution_rate)")
+        else
+            println(io, "  substitution_rate = not set")
+        end
+    end
+end
+
