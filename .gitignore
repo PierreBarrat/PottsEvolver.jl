@@ -17,3 +17,4 @@ example/_scrap
 example/Manifest.toml
 example/test_notebooks
 profile/*
+.vscode/*
