@@ -24,7 +24,7 @@ import BioSequenceMappings: Alignment, to_string, hamming
 export Alignment, Alphabet
 
 # Default types for numerical quantities
-const IntType = UInt8
+const IntType = Int64
 const FloatType = Float64
 
 include("codons.jl")

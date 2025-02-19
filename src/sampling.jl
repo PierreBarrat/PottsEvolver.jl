@@ -42,10 +42,8 @@ function mcmc_sample(
     logger = get_logger(verbose, logfile, logfile_verbose)
     with_logger(logger) do
         return if params.sampling_type == :continuous
-            params = convert(SamplingParameters{FloatType}, params)
             mcmc_sample_continuous_chain(g, M, s0, params; kwargs...)
         elseif params.sampling_type == :discrete
-            params = convert(SamplingParameters{Int}, params)
             mcmc_sample_chain(g, M, s0, params; kwargs...)
         else
             throw(ArgumentError("Invalid sampling type: $(params.sampling_type)"))

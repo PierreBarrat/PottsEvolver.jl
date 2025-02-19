@@ -3,31 +3,19 @@
     @test_throws ArgumentError SamplingParameters(; Teq=5, step_type=:dubstep)
     @test_throws ArgumentError SamplingParameters(; Teq=5, step_meaning=:olive_tree)
 
-    @testset "Conversion" begin
-        p_int = SamplingParameters(; Teq=5)
-        p_float = SamplingParameters(; Teq=5., sampling_type=:continuous, step_type=:sqrt)
-        p_float_2 = SamplingParameters(; Teq=5.5, sampling_type=:continuous, step_type=:sqrt)
+    @testset "Construction" begin
+        sampling_type = :discrete
+        @test_throws ArgumentError SamplingParameters(; sampling_type, Teq=5.2) # discrete needs integer times
+        @test_throws ArgumentError SamplingParameters(; sampling_type, burnin=1.5)  # discrete needs integer times
+        @test_throws ArgumentError SamplingParameters(; sampling_type, Teq=5.2, burnin=1.5)  # type of Teq determines type of burnin
+        @test SamplingParameters(; sampling_type, Teq=5., burnin=1.) isa SamplingParameters{Int}
 
-        # Test no-op cases
-        p_int_converted = convert(SamplingParameters{Int}, p_int)
-        p_float_converted = convert(SamplingParameters{Float64}, p_float)
-        for p in propertynames(p_int)
-            @test getproperty(p_int_converted, p) == getproperty(p_int, p)
-            @test getproperty(p_float_converted, p) == getproperty(p_float, p)
-        end
-
-        # Test actual conversion
-        p_int_converted = convert(SamplingParameters{Float64}, p_int)
-        p_float_converted = convert(SamplingParameters{Int}, p_float)
-        @test p_int_converted isa SamplingParameters{Float64}
-        @test p_float_converted isa SamplingParameters{Int}
-        for p in propertynames(p_int)
-            @test getproperty(p_int_converted, p) == getproperty(p_int, p)
-            @test getproperty(p_float_converted, p) == getproperty(p_float, p)
-        end        
-
-        # Test fail
-        @test_throws InexactError convert(SamplingParameters{Int}, p_float_2)
+        sampling_type = :continuous # everything should work and give SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=5.2) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, burnin=1.5) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=5.2, burnin=1.5) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=50) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=5, burnin=1.5) isa SamplingParameters{Float64}
     end
 end
 

@@ -135,7 +135,7 @@ can be used directly.
         sampling_type,
         step_type,
         Teq::T,
-        burnin::T,
+        burnin::Real,
         step_meaning,
         fraction_gap_step,
         branchlength_meaning,
@@ -154,16 +154,15 @@ can be used directly.
             For :discrete mcmc, `step_type` should be in $VALID_STEP_TYPES_DISCRETE.
             Instead $(step_type).
             """
-            if !(T <: Integer)
-                try 
-                    Teq = Int(Teq)
-                    burnin = Int(burnin)
-                catch err
-                    @error """
-                    For :discrete mcmc, `Teq` should be an integer. Instead $(Teq).
-                    """
-                    throw(err)
-                end
+            try 
+                Teq = Int(Teq)
+                burnin = Int(burnin)
+            catch err
+                msg = """
+                For :discrete mcmc, `Teq` and `burnin` should be integers. 
+                Instead $Teq and $burnin.
+                """
+                throw(ArgumentError(msg))
             end
             Int
         elseif sampling_type == :continuous
@@ -194,20 +193,6 @@ can be used directly.
     end
 end
 
-function Base.convert(::Type{SamplingParameters{T}}, params::SamplingParameters) where {T}
-    Teq = T(params.Teq)
-    burnin = T(params.burnin)
-    return SamplingParameters(
-        params.sampling_type,
-        params.step_type,
-        Teq,
-        burnin,
-        params.step_meaning,
-        params.fraction_gap_step,
-        params.branchlength_meaning,
-        params.substitution_rate,
-    )
-end
 
 function Base.show(io::IO, params::SamplingParameters)
     println(io, "SamplingParameters:")

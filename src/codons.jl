@@ -103,7 +103,7 @@ genetic_code(codon::Codon) = _genetic_code_struct[codon]
 
 
 const _reverse_code_integers = let
-    rcode = Dict{IntType, Vector{IntType}}()
+    rcode = Vector{Vector{IntType}}(undef, length(aa_alphabet))
     for aa in 1:length(aa_alphabet)
         codons = findall(codon_alphabet.index_to_char) do c
             genetic_code(c) == aa_alphabet(aa)

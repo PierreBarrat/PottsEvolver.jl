@@ -232,13 +232,7 @@ Return the a `q` by `L` matrix `Q` and the total rate `R`.
 """
 function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scratch=false)
     # Compute energy differences
-    state.ΔE .= if isnothing(state.previous_seq) || from_scratch
-        # do the calculation from scratch, using the buffer to avoid allocation
-        compute_energy_differences!(state.qL_buffer, state.seq, g) 
-    else
-        # `!` because the buffer of state is modified
-        compute_energy_differences!(state, g) # use the previous sequence and ΔE to help
-    end
+    state.ΔE .= compute_energy_differences!(state, g; from_scratch)
 
     # filter out inaccessible sequences (because of genetic code)
     set_accessibility_mask!(state.accessibility_mask, state.seq)
@@ -332,7 +326,7 @@ Set the accessibility mask for a sequence.
 # Returns
 The updated mask.
 """
-function set_accessibility_mask!(mask::Matrix{Bool}, seq)
+function set_accessibility_mask!(mask::Matrix{Bool}, seq::AbstractSequence)
     q, L = size(mask)
     for i in 1:L, a in 1:q
         mask[a, i] = !(sequence(seq)[i] == a) # cannot mutate to current state
@@ -345,18 +339,23 @@ end
 #============================================================#
 
 
-# Case with using the previous sequence ~ update
 
-function compute_energy_differences!(state::CTMCState, g::PottsGraph)
-    @argcheck !isnothing(state.previous_seq) """
-    This function only accepts a state with a previous sequence.
-    """
-    return compute_energy_differences!(
-        state.qL_buffer, state.ΔE, state.previous_seq, state.i, state.x, g,
-    ) # changes the buffer and returns it
+
+# dispatch to two cases
+function compute_energy_differences!(state::CTMCState, g::PottsGraph; from_scratch=false)
+    # the buffer of state is changed
+    return if isnothing(state.previous_seq) || from_scratch
+        # do the calculation from scratch, using the buffer to avoid allocation
+        compute_energy_differences!(state.qL_buffer, state.seq, g) 
+    else
+        compute_energy_differences!(
+            state.qL_buffer, state.ΔE, state.previous_seq, state.i, state.x, g,
+        ) 
+    end    
 end
 
-"""
+# Case with using the previous sequence ~ update
+    """
     compute_energy_differences(
         ΔE::Vector{<:AbstractFloat},
         refseq::AbstractSequence,
@@ -417,6 +416,7 @@ function compute_energy_differences!(
     q = IntType(21)
     ai = refseq.aaseq[i] # previous aa at pos. i
     x_aa = genetic_code(x) # current aa at pos. i
+    ΔE .= ref_ΔE
     for j in 1:L
         # The calculation below considers all amino acids y_aa
         # This is inefficient, as some amino-acids are not accessible from the current codon x
@@ -434,14 +434,15 @@ function compute_energy_differences!(
             end
         else
             aj = refseq.aaseq[j]
+            dJ = g.J[aj, x_aa, j, i] - g.J[aj, ai, j, i]
             for y_aa in 1:q
                 codons = reverse_code(y_aa)
                 y = first(codons)
-                new_ΔE = ref_ΔE[y,j]
-                new_ΔE += g.J[aj, x_aa, j, i] - g.J[aj, ai, j, i]
+                new_ΔE = 0.
+                new_ΔE += dJ
                 new_ΔE -= g.J[y_aa, x_aa, j, i] - g.J[y_aa, ai, j, i]
                 for y in codons
-                    ΔE[y,j] = new_ΔE
+                    ΔE[y,j] += new_ΔE
                 end
             end
         end
