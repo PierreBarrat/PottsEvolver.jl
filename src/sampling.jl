@@ -189,7 +189,7 @@ function get_init_sequence(s0::AbstractVector{<:Integer}, g; verbose=true)
         if maximum(s0) <= 21
             AASequence(s0)
         elseif 21 < maximum(s0) <= 65
-            CodonSequence(s0)
+            CodonSequence(s0; source=:codon)
         else
             error("Sequence $s0 incompatible with graph of size $(size(g))")
         end

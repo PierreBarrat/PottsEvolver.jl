@@ -118,8 +118,8 @@ end
     CodonSequence(L::Int; source=:aa, T)
 
 Sample `L` states at random of the type of `source` (`:aa` or `:codon`):
-    - if `:codon`, sample codons at random
-    - if `:aa`, sample amino acids at random and reverse translate them randomly to matching codons
+- if `:codon`, sample codons at random
+- if `:aa`, sample amino acids at random and reverse translate them randomly to matching codons
 
 Underlying integer type is `T`.
 """

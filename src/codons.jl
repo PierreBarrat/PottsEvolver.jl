@@ -225,7 +225,10 @@ what other codons are accessible by one mutation?
 =#
 
 function _build_codon_access_map()
-    M = Dict{Tuple{IntType,IntType},Tuple{Vector{IntType},Vector{IntType}}}()
+    M = Dict{
+        Tuple{IntType,IntType},
+        Tuple{ReadOnlyVector{IntType}, ReadOnlyVector{IntType}}
+    }()
     for c in 1:length(codon_alphabet), i in 1:3
         codon = codon_alphabet(c)
         if !isgap(codon) && isvalid(codon)
@@ -235,7 +238,10 @@ function _build_codon_access_map()
                 codon_alphabet(Codon(nts...))
             end
             filter!(!isstop, accessible_codons)
-            M[c, i] = (accessible_codons, map(genetic_code, accessible_codons))
+            M[c, i] = (
+                ReadOnlyArray(accessible_codons),
+                ReadOnlyArray(map(genetic_code, accessible_codons))
+            )
         end
     end
     M
@@ -249,7 +255,7 @@ Similar to the above, with the following differences.
 - A codon is not accessible from itself (this is used for continuous time sampling).
 =#
 function _build_codon_access_map_2()
-    M = Dict{IntType,Tuple{Vector{IntType},Vector{IntType}}}()
+    M = Dict{IntType,Tuple{ReadOnlyVector{IntType},ReadOnlyVector{IntType}}}()
 
     for c in 1:length(codon_alphabet)
         codon = codon_alphabet(c)
@@ -259,7 +265,10 @@ function _build_codon_access_map_2()
         if isgap(codon)
             accessible_codons = collect(1:length(codon_alphabet))
             filter!(c -> iscoding(codon_alphabet(c)), accessible_codons) # remove all non-coding (i.e. gap and stop)
-            M[c] = (accessible_codons, map(genetic_code, accessible_codons))
+            M[c] = (
+                ReadOnlyArray(accessible_codons),
+                ReadOnlyArray(map(genetic_code, accessible_codons))
+            )
             continue
         end
 
@@ -278,7 +287,10 @@ function _build_codon_access_map_2()
         # add gap codon
         push!(accessible_codons, codon_alphabet(Codon("---")))
         # store
-        M[c] = (accessible_codons, map(genetic_code, accessible_codons))
+        M[c] = (
+            ReadOnlyArray(accessible_codons),
+            ReadOnlyArray(map(genetic_code, accessible_codons))
+        )
     end
 
     return M
@@ -323,6 +335,11 @@ Return all codons/amino-acids accessible by mutating `codon` at any base.
 Value returned is a `Tuple` whose first/second elements represent codons/amino-acids.
 `codon` itself (and the corresponding amino-acid) is **not** included in the result.
 This differs from the two argument version.
+
+This function differs from the two argument version:
+- the gap codon is accessible from all other codons;
+- a codon is not accessible from itself;
+- any codon is accessible from the gap codon.
 
 All non-gap codons are considered accessible from the gap codon.
 """

@@ -42,7 +42,7 @@ end
         # Create an example codon sequence with matching amino acids
         codons = Int8.([1, 2, 3, 6, 7])
         aas = map(genetic_code, codons)
-        codon_seq = CodonSequence(codons)
+        codon_seq = CodonSequence(codons; source=:codon)
 
         # Test constructing the object
         @test codon_seq isa CodonSequence{Int8}
@@ -61,7 +61,7 @@ end
         @test pointer(codon_seq.aaseq) != pointer(codon_seq_copy.aaseq)
 
         # Test in place copy
-        codon_seq_2 = CodonSequence(Int8.([7, 6, 3, 2, 1]))
+        codon_seq_2 = CodonSequence(Int8.([7, 6, 3, 2, 1]); source=:codon)
         copy!(codon_seq_copy, codon_seq_2)
         @test codon_seq_2.seq == Int8.([7, 6, 3, 2, 1])
         @test codon_seq_copy.seq == codon_seq_2.seq
@@ -69,7 +69,7 @@ end
         @test pointer(codon_seq_copy.seq) != pointer(codon_seq_2.seq)
 
         # Test fail in place copy when different lengths
-        codon_seq_3 = CodonSequence(Int8.([7, 6, 3, 2]))
+        codon_seq_3 = CodonSequence(Int8.([7, 6, 3, 2]); source=:codon)
         @test_throws ArgumentError copy!(codon_seq_copy, codon_seq_3)
     end
 end
