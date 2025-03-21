@@ -4,7 +4,7 @@
 
 const VALID_STEP_TYPES = [:gibbs, :metropolis, :glauber, :sqrt]
 const VALID_STEP_MEANINGS = [:proposed, :accepted, :changed]
-const VALID_STEP_TYPES_CONTINUOUS = [:metropolis, :glauber, :sqrt]
+const VALID_STEP_TYPES_CONTINUOUS = [:metropolis, :glauber, :sqrt, :gibbs]
 const VALID_STEP_TYPES_DISCRETE = [:gibbs]
 
 """
@@ -139,7 +139,7 @@ can be used directly.
         step_meaning,
         fraction_gap_step,
         branchlength_meaning,
-        substitution_rate,
+        substitution_rate::Union{Nothing, Real},
     ) where {T}
         step_meaning = try
             Symbol(step_meaning)

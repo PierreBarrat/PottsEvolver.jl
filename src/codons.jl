@@ -271,7 +271,7 @@ function _build_codon_access_map_2()
             nts = collect(bases(codon))
             nts[b] = nt
             new_codon = Codon(nts...)
-            if iscoding(new_codon)
+            if iscoding(new_codon) && new_codon != codon
                 push!(accessible_codons, codon_alphabet(new_codon))
             end
         end
@@ -324,7 +324,7 @@ Value returned is a `Tuple` whose first/second elements represent codons/amino-a
 `codon` itself (and the corresponding amino-acid) is **not** included in the result.
 This differs from the two argument version.
 
-All codons are considered accessible from the gap codon.
+All non-gap codons are considered accessible from the gap codon.
 """
 function accessible_codons(codon::Integer)
     return get(_codon_access_map_2, codon, (nothing, nothing))

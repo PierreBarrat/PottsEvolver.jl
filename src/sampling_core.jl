@@ -270,22 +270,6 @@ function pick_aa_mutation(s::CodonSequence; rng=Random.GLOBAL_RNG)
     end
 end
 
-function softmax!(X)
-    # thanks chatGPT!
-    # Compute the maximum value in X to ensure numerical stability
-    max_val = maximum(X)
-    Z = 0.0
-    @inbounds for i in eachindex(X)
-        X[i] -= max_val
-        X[i] = exp(X[i])
-        Z += X[i]
-    end
-    @inbounds for i in eachindex(X)
-        X[i] /= Z
-    end
-    return X
-end
-
 function sample_from_weights(W)
     # !!! Assumes W is normalized !!!
     x = rand()

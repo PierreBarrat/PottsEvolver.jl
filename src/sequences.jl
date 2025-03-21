@@ -99,7 +99,7 @@ Build a `CodonSequence` from `seq`:
 - if `source==:aa`, `seq` is interpreted as representing amino acids (see `aa_alphabet`);
   matching codons are randomly chosen using the `PottsEvolver.reverse_code_rand` method.
 """
-function CodonSequence(seq::AbstractVector{T}; source=:codon) where {T<:Integer}
+function CodonSequence(seq::AbstractVector{T}; source=:aa) where {T<:Integer}
     return if source == :aa
         CodonSequence(
             convert(Vector{T}, map(reverse_code_rand, seq)), convert(Vector{T}, seq)

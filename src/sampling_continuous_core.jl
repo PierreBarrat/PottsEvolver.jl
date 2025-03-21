@@ -8,6 +8,7 @@
     i::Union{Nothing,Integer} # position of the next mutation
     x::Union{Nothing,Integer} # state of the next mutation
     R::Union{Nothing,FloatType} = nothing # average transition rate, used for scaling
+    energy::Union{Nothing, FloatType}
     function CTMCState{S}(sequence::S, q::Integer, L::Integer) where {S<:AbstractSequence}
         return new{S}(
             sequence,
@@ -16,6 +17,7 @@
             Matrix{Bool}(undef, q, L), # accessibility mask
             Matrix{FloatType}(undef, q, L), # qxL buffer
             Matrix{FloatType}(undef, q, L), # ΔE copy
+            nothing,
             nothing,
             nothing,
             nothing,
@@ -38,6 +40,19 @@ function CTMCState(sequence::NumSequence{T,q}) where {T,q}
     CTMCState{NumSequence{T,q}}(sequence, q, L)
 end
 
+function reset!(state::CTMCState)
+    state.seq = state.seq
+    state.previous_seq = nothing
+    state.ΔE .= 0
+    state.accessibility_mask .= false
+    state.qL_buffer .= 0
+    state.ΔE_copy .= 0
+    state.i = nothing
+    state.x = nothing
+    state.R = nothing
+    state.energy = nothing
+end
+
 Base.size(state::CTMCState) = size(state.ΔE)
 
 #=============================================#
@@ -50,7 +65,7 @@ Base.size(state::CTMCState) = size(state.ΔE)
         kwargs...
     )
     mcmc_steps!(
-        state::CTMCState, g, Tmax::AbstractFloat, parameters::SamplingParameters; kwargs...
+        state::CTMCState, g, Tmax::AbstractFloat, step_type::Symbol; kwargs...
     )
 
 Sample `g` during time `Tmax` (continuous) from sequence `seq`.
@@ -107,9 +122,13 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
         # compute transition rates and scaled substitution rate
         Q = transition_rates!(state, g, step_type)
         R = sum(Q)
-        @assert R > 0 "Something went wrong in gillespie: null total rate"
+        if R <= 0
+            @error "Something went wrong in gillespie: null total rate"
+            @info state
+        end
         R_scaled = isnothing(state.R) ? R : R/state.R*L
-
+        @debug "Unscaled substitution rate: $R"
+        @debug "Scaled substitution rate per site: $(R_scaled/L)"
         # pick time of next substitution
         Δt = rand(rng, Exponential(1/R_scaled))
         t += Δt
@@ -142,7 +161,7 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
         end
         @assert a > 0 && i > 0 "Something went wrong in gillespie: no substitution chosen"
         # do the substitution
-        gillespie_substitute!(state, i, a)
+        gillespie_substitute!(state, i, a, g)
         n_substitutions += 1
     end
 
@@ -150,7 +169,7 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
     return n_substitutions
 end
 
-function gillespie_substitute!(state, i, a)
+function gillespie_substitute!(state, i, a, g)
     # copy sequence to state.previous_sequence, without allocation
     if isnothing(state.previous_seq)
         state.previous_seq = copy(state.seq)
@@ -163,6 +182,12 @@ function gillespie_substitute!(state, i, a)
     # set i, a
     state.i = i
     state.x = a
+    # update energy
+    state.energy = if isnothing(state.energy)
+        energy(state.seq, g)
+    else
+        state.energy + state.ΔE[a, i]
+    end
 
     return state
 end
@@ -183,24 +208,36 @@ end
 
 """
     average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence; kwargs...)
+    average_transition_rate(g::PottsGraph, step_type, S::Vector{AbstractSequence})
 
 Compute the average transition rate for the continuous time Markov chain based on `g`. 
-`s0` is only used to initialize the `CTMCState` and provide a type. 
+
+In the first form, a sample from `g` is used for averaging.
+`s0` is only used to initialize the `CTMCState` and provide a type (codon or aa),
+and the keyword arguments are used to parametrize the sampling process.
+
+In the second form, the sample is provided as argument.
 """
 function average_transition_rate(
-    g::PottsGraph, step_type, s0::AbstractSequence
-    ; rng=Random.GLOBAL_RNG, progress_meter=true
+    g::PottsGraph, step_type, s0::AbstractSequence;
+    rng=Random.GLOBAL_RNG, progress_meter=true, params=nothing, n_samples=100,
 )
     (;L) = size(g)
 
-    M = 100
-    params = SamplingParameters(Teq = L*10) # default continuous sampling parameters
-    sample_discrete = mcmc_sample(
-        g, M, params; 
+    # params default to Teq=10*L and default of SamplingParameters for the rest
+    params = isnothing(params) ? SamplingParameters(Teq = L*10) : params
+
+    sample_eq = mcmc_sample(
+        g, n_samples, params;
         alignment_output=false, init=s0, rng=rng, progress_meter=progress_meter
     ).sequences
-    state = CTMCState(sample_discrete[1])
-    Rmean = mean(sample_discrete) do sequence
+    return average_transition_rate(g, step_type, sample_eq)
+end
+function average_transition_rate(
+    g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence},
+)
+    state = CTMCState(S[1])
+    Rmean = mean(S) do sequence
         copy!(state.seq, sequence)
         sum(transition_rates!(state, g, step_type))
     end
@@ -220,7 +257,7 @@ Return the a `q` by `L` matrix `Q` and the total rate `R`.
 Allocates a `CTMCState`. 
 """
 function transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
-    state = CTMCState(sequence)
+    state = CTMCState(copy(sequence))
     return transition_rates!(state, g, step_type)
 end
 
@@ -243,6 +280,8 @@ function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scra
         transition_rates_metropolis!(state, g)
     elseif step_type == :sqrt
         transition_rates_sqrt!(state, g)
+    elseif step_type == :gibbs
+        transition_rates_gibbs!(state, g)
     else
         throw(ArgumentError("Step type $step_type not implemented"))
     end
@@ -287,6 +326,26 @@ function transition_rates_sqrt!(state::CTMCState, g::PottsGraph)
         else
             state.qL_buffer[a, i] = 0
         end
+    end
+    return state.qL_buffer
+end
+
+function transition_rates_gibbs!(state::CTMCState{<:CodonSequence}, g::PottsGraph)
+    throw(ArgumentError("""
+        Step type `:gibbs` is not compatible with continuous sampling and codon sequences.
+            Either use an `AASequence`, another step type, or do discrete sampling."""))
+end
+function transition_rates_gibbs!(state::CTMCState, g::PottsGraph)
+    (q, L) = size(state)
+    Eref = isnothing(state.energy) ? energy(state.seq, g) : state.energy
+    @inbounds for i in 1:L
+        Zi = 0
+        for a in 1:q
+            zi = exp(-(Eref + state.ΔE[a, i]))
+            Zi += zi
+            state.qL_buffer[a, i] = state.accessibility_mask[a, i] ? zi : 0.
+        end
+        state.qL_buffer[:, i] /= Zi
     end
     return state.qL_buffer
 end
@@ -338,9 +397,6 @@ end
 ##################### Energy differences #####################
 #============================================================#
 
-
-
-
 # dispatch to two cases
 function compute_energy_differences!(state::CTMCState, g::PottsGraph; from_scratch=false)
     # the buffer of state is changed
@@ -355,7 +411,7 @@ function compute_energy_differences!(state::CTMCState, g::PottsGraph; from_scrat
 end
 
 # Case with using the previous sequence ~ update
-    """
+"""
     compute_energy_differences(
         ΔE::Vector{<:AbstractFloat},
         refseq::AbstractSequence,
