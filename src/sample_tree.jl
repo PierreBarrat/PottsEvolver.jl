@@ -5,7 +5,6 @@ end
 
 Base.copy(S::Sequence) = Sequence(copy(S.seq))
 
-
 #================================#
 ########### CONTINUOUS ###########
 #================================#
@@ -61,7 +60,7 @@ function mcmc_sample_continuous_tree!(
     tree::Tree{<:Sequence{S}},
     params::SamplingParameters;
     rng=Random.GLOBAL_RNG,
-) where {S <: AbstractSequence}
+) where {S<:AbstractSequence}
     tmp_check_alphabet_consistency(g, data(root(tree)).seq)
     @argcheck params.sampling_type == :continuous
 
@@ -88,7 +87,7 @@ function mcmc_sample_continuous_tree!(
         params.substitution_rate
     else
         @info "Computing average substitution rate for the model using discrete sampling..."
-        (;value, time) = @timed average_transition_rate(g, params.step_type, rootseq; rng)
+        (; value, time) = @timed average_transition_rate(g, params.step_type, rootseq; rng)
         @info "Done in $time seconds"
         @info "Average substitution rate: $value"
         value
@@ -179,7 +178,7 @@ function mcmc_sample_tree!(
     rng=Random.GLOBAL_RNG,
 ) where {S<:AbstractSequence}
     tmp_check_alphabet_consistency(g, data(root(tree)).seq)
-    @argcheck params.sampling_type == :discrete 
+    @argcheck params.sampling_type == :discrete
 
     # logging & warnings
     let
@@ -227,7 +226,6 @@ function sample_children!(node::TreeNode{<:Sequence}, g, params, gibbs_holder; k
     end
     return nothing
 end
-
 
 #=====================#
 ######## Utils ########

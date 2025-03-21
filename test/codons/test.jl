@@ -47,8 +47,8 @@ end
 
     # Test the two argument version of accessible codons
     for codon in codons
-        acc_codons = mapreduce(b -> PottsEvolver.accessible_codons(codon,b)[1], vcat, 1:3)
-        acc_aas = mapreduce(b -> PottsEvolver.accessible_codons(codon,b)[2], vcat, 1:3)
+        acc_codons = mapreduce(b -> PottsEvolver.accessible_codons(codon, b)[1], vcat, 1:3)
+        acc_aas = mapreduce(b -> PottsEvolver.accessible_codons(codon, b)[2], vcat, 1:3)
         @test codon in acc_codons
         @test gap_codon ∉ acc_codons
         @test genetic_code.(acc_codons) == acc_aas
@@ -68,9 +68,11 @@ end
         acc_cod_1 = sort(acc_cod_1)
 
         # one argument version - filter gap out
-        acc_cod_2 = filter(PottsEvolver.accessible_codons(codon)[1]) do c
-            !PottsEvolver.isgap(codon_alphabet(c)) # need to filter gap out
-        end |> sort
+        acc_cod_2 = sort(
+            filter(PottsEvolver.accessible_codons(codon)[1]) do c
+                !PottsEvolver.isgap(codon_alphabet(c)) # need to filter gap out
+            end,
+        )
 
         @test acc_cod_1 == acc_cod_2
     end

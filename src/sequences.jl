@@ -209,7 +209,7 @@ NumSequence(L::Integer, q::Integer; T=IntType) = NumSequence{T,q}(L)
 Base.copy(x::NumSequence{T,q}) where {T,q} = NumSequence(copy(x.seq), q)
 function Base.copy!(dest::NumSequence{T,q}, source::NumSequence{T,q}) where {T,q}
     @argcheck length(source) == length(dest)
-    for (i,a) in enumerate(sequence(source))
+    for (i, a) in enumerate(sequence(source))
         dest.seq[i] = a
     end
     return dest

@@ -104,7 +104,7 @@ end
     @test num_seq_copy == num_seq
 
     # Test in place copy
-    num_seq_2 = NumSequence{T, T(q)}(ones(Int, L))
+    num_seq_2 = NumSequence{T,T(q)}(ones(Int, L))
     num_seq_3 = NumSequence(ones(Int, L), 4) # will be NumSequence{Int, 4}, but q above is 5
     copy!(num_seq_copy, num_seq_2)
     @test num_seq_copy == num_seq_2

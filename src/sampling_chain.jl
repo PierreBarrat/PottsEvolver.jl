@@ -128,7 +128,9 @@ function mcmc_sample_continuous_chain(
         params.substitution_rate
     else
         @info "Computing average substitution rate for the model using discrete sampling..."
-        (;value, time) = @timed average_transition_rate(g, step_type, s0; rng, progress_meter)
+        (; value, time) = @timed average_transition_rate(
+            g, step_type, s0; rng, progress_meter
+        )
         @info "Done in $time seconds"
         @info "Average substitution rate: $value"
         value
@@ -162,9 +164,7 @@ function mcmc_sample_continuous_chain(
         S[m] = copy(state.seq)
         tvals[m] = tvals[m - 1] + Float64(Teq)
         # misc.
-        push!(
-            log_info, (;number_substitutions)
-        )
+        push!(log_info, (; number_substitutions))
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
     end
     @info "Sampling done in $time seconds"

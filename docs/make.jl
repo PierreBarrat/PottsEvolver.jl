@@ -1,10 +1,7 @@
 using PottsEvolver
 using Documenter
 
-DocMeta.setdocmeta!(
-    PottsEvolver, :DocTestSetup, :(using PottsEvolver)
-    ; recursive=true
-)
+DocMeta.setdocmeta!(PottsEvolver, :DocTestSetup, :(using PottsEvolver); recursive=true)
 
 makedocs(;
     modules=[PottsEvolver],
@@ -15,14 +12,8 @@ makedocs(;
         edit_link="master",
         assets=String[],
     ),
-    pages = [
-        "Quickstart" => "index.md",
-        "Reference" => "reference.md"
-    ],
+    pages=["Quickstart" => "index.md", "Reference" => "reference.md"],
     checkdocs=:exports,
 )
 
-deploydocs(;
-    repo="github.com/PierreBarrat/PottsEvolver.jl.git",
-    devbranch="master",
-)
+deploydocs(; repo="github.com/PierreBarrat/PottsEvolver.jl.git", devbranch="master")

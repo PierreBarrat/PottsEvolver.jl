@@ -51,15 +51,15 @@
             # Create two sequences differing at position 1
             seq = AASequence([1, 2, 3])
             refseq = AASequence([4, 2, 3])
-            
+
             # Calculate energy difference at position 1
             dE = PottsEvolver._delta_energy(seq, refseq, 1, g)
-            
+
             # Verify by calculating full energies
             E1 = energy(seq, g)
             E2 = energy(refseq, g)
             @test dE ≈ E1 - E2
-            
+
             # Test that sequences differing at multiple positions throw an error
             seq_invalid = AASequence([1, 5, 3])
             @test_throws ArgumentError PottsEvolver._delta_energy(seq_invalid, refseq, 1, g)
@@ -71,15 +71,15 @@
             refseq = copy(seq)
             refseq.seq[1] = 4  # Different codon at position 1
             refseq.aaseq[1] = genetic_code(4)
-            
+
             # Calculate energy difference at position 1
             dE = PottsEvolver._delta_energy(seq, refseq, 1, g)
-            
+
             # Verify by calculating full energies
             E1 = energy(seq, g)
             E2 = energy(refseq, g)
             @test dE ≈ E1 - E2
-            
+
             # Test that sequences differing at multiple positions throw an error
             seq_invalid = copy(seq)
             seq_invalid.seq[2] = 4

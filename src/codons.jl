@@ -28,7 +28,7 @@ const nt_alphabet = Alphabet(nucleotides, IntType)
     b3::Char
     function Codon(b1, b2, b3)
         @argcheck b1 in _nucleotides_gap && b2 in _nucleotides_gap && b3 in _nucleotides_gap
-         return new(b1, b2, b3)
+        return new(b1, b2, b3)
     end
 end
 function Codon(s::AbstractString)
@@ -61,9 +61,11 @@ end
 ############### Genetic code ###############
 #==========================================#
 
+#! format: off
 const aa_order = [
 'K', 'N', 'K', 'N', 'T', 'T', 'T', 'T', 'R', 'S', 'R', 'S', 'I', 'I', 'M', 'I', 'Q', 'H', 'Q', 'H', 'P', 'P', 'P', 'P', 'R', 'R', 'R', 'R', 'L', 'L', 'L', 'L', 'E', 'D', 'E', 'D', 'A', 'A', 'A', 'A', 'G', 'G', 'G', 'G', 'V', 'V', 'V', 'V', '*', 'Y', '*', 'Y', 'S', 'S', 'S', 'S', '*', 'C', 'W', 'C', 'L', 'F', 'L', 'F'
 ]
+#! format: on
 
 # Dictionary from Codon to Char
 const _genetic_code_struct = let
@@ -101,7 +103,6 @@ Translate `c` and return the amino acid as a `Char`.
 """
 genetic_code(codon::Codon) = _genetic_code_struct[codon]
 
-
 const _reverse_code_integers = let
     rcode = Vector{Vector{IntType}}(undef, length(aa_alphabet))
     for aa in 1:length(aa_alphabet)
@@ -113,7 +114,7 @@ const _reverse_code_integers = let
     rcode
 end
 const _reverse_code_struct = let
-    rcode = Dict{Char, Vector{Codon}}()
+    rcode = Dict{Char,Vector{Codon}}()
     for aa in symbols(aa_alphabet)
         rcode[aa] = map(codon_alphabet, _reverse_code_integers[aa_alphabet(aa)])
     end
@@ -225,10 +226,7 @@ what other codons are accessible by one mutation?
 =#
 
 function _build_codon_access_map()
-    M = Dict{
-        Tuple{IntType,IntType},
-        Tuple{ReadOnlyVector{IntType}, ReadOnlyVector{IntType}}
-    }()
+    M = Dict{Tuple{IntType,IntType},Tuple{ReadOnlyVector{IntType},ReadOnlyVector{IntType}}}()
     for c in 1:length(codon_alphabet), i in 1:3
         codon = codon_alphabet(c)
         if !isgap(codon) && isvalid(codon)
@@ -240,11 +238,11 @@ function _build_codon_access_map()
             filter!(!isstop, accessible_codons)
             M[c, i] = (
                 ReadOnlyArray(accessible_codons),
-                ReadOnlyArray(map(genetic_code, accessible_codons))
+                ReadOnlyArray(map(genetic_code, accessible_codons)),
             )
         end
     end
-    M
+    return M
 end
 const _codon_access_map = _build_codon_access_map()
 
@@ -267,11 +265,10 @@ function _build_codon_access_map_2()
             filter!(c -> iscoding(codon_alphabet(c)), accessible_codons) # remove all non-coding (i.e. gap and stop)
             M[c] = (
                 ReadOnlyArray(accessible_codons),
-                ReadOnlyArray(map(genetic_code, accessible_codons))
+                ReadOnlyArray(map(genetic_code, accessible_codons)),
             )
             continue
         end
-
 
         # general case
         accessible_codons = IntType[]
@@ -289,7 +286,7 @@ function _build_codon_access_map_2()
         # store
         M[c] = (
             ReadOnlyArray(accessible_codons),
-            ReadOnlyArray(map(genetic_code, accessible_codons))
+            ReadOnlyArray(map(genetic_code, accessible_codons)),
         )
     end
 
@@ -355,7 +352,6 @@ function accessible_codons(codon::Codon)
     end
 end
 
-
 #===========================================================================#
 ########################## Amino acid degeneracies ##########################
 #===========================================================================#
@@ -364,37 +360,3 @@ const _aa_degeneracy = Dict{IntType,FloatType}(
     a => log(length(reverse_code(a))) for a in 1:length(aa_alphabet)
 )
 aa_degeneracy(a::Integer) = get(_aa_degeneracy, a, -Inf)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -54,7 +54,6 @@ include("sampling_core.jl")
 
 include("sampling_continuous_core.jl")
 
-
 include("sampling_chain.jl")
 #! format: off
 # public mcmc_sample_chain

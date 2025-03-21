@@ -60,7 +60,8 @@ function steps_from_branchlength(τ::Real, p::BranchLengthMeaning, L::Int)
         return round(Int, τ)
     elseif p.length == :poisson
         return pois_rand(τ)
-    else throw(ArgumentError("Invalid `length` field $(p.length)"))
+    else
+        throw(ArgumentError("Invalid `length` field $(p.length)"))
     end
 end
 
@@ -139,7 +140,7 @@ can be used directly.
         step_meaning,
         fraction_gap_step,
         branchlength_meaning,
-        substitution_rate::Union{Nothing, Real},
+        substitution_rate::Union{Nothing,Real},
     ) where {T}
         step_meaning = try
             Symbol(step_meaning)
@@ -154,7 +155,7 @@ can be used directly.
             For :discrete mcmc, `step_type` should be in $VALID_STEP_TYPES_DISCRETE.
             Instead $(step_type).
             """
-            try 
+            try
                 Teq = Int(Teq)
                 burnin = Int(burnin)
             catch err
@@ -193,18 +194,20 @@ can be used directly.
     end
 end
 
-
 function Base.show(io::IO, params::SamplingParameters)
     println(io, "SamplingParameters:")
     println(io, "  sampling_type = :$(params.sampling_type)")
     println(io, "  step_type = :$(params.step_type)")
     println(io, "  Teq = $(params.Teq)")
     println(io, "  burnin = $(params.burnin)")
-    
+
     if params.sampling_type == :discrete
         println(io, "  step_meaning = :$(params.step_meaning)")
         println(io, "  fraction_gap_step = $(params.fraction_gap_step)")
-        println(io, "  branchlength_meaning = BranchLengthMeaning(:$(params.branchlength_meaning.type), :$(params.branchlength_meaning.length))")
+        println(
+            io,
+            "  branchlength_meaning = BranchLengthMeaning(:$(params.branchlength_meaning.type), :$(params.branchlength_meaning.length))",
+        )
     elseif params.sampling_type == :continuous
         if !isnothing(params.substitution_rate)
             println(io, "  substitution_rate = $(params.substitution_rate)")
@@ -213,4 +216,3 @@ function Base.show(io::IO, params::SamplingParameters)
         end
     end
 end
-

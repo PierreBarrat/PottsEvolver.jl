@@ -204,11 +204,11 @@ function context_dependent_entropy(s::AbstractSequence, g::PottsGraph)
     (; q, L) = size(g)
     f = zeros(Float64, q)
 
-    CDE = 0.
+    CDE = 0.0
     for (i, a_ref) in enumerate(s.seq)
         for b in 1:q
             if b == a_ref
-                f[b] = 0.
+                f[b] = 0.0
                 continue
             end
 

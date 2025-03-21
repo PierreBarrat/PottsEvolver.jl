@@ -8,14 +8,18 @@
         @test_throws ArgumentError SamplingParameters(; sampling_type, Teq=5.2) # discrete needs integer times
         @test_throws ArgumentError SamplingParameters(; sampling_type, burnin=1.5)  # discrete needs integer times
         @test_throws ArgumentError SamplingParameters(; sampling_type, Teq=5.2, burnin=1.5)  # type of Teq determines type of burnin
-        @test SamplingParameters(; sampling_type, Teq=5., burnin=1.) isa SamplingParameters{Int}
+        @test SamplingParameters(; sampling_type, Teq=5.0, burnin=1.0) isa
+            SamplingParameters{Int}
 
         sampling_type = :continuous # everything should work and give SamplingParameters{Float64}
         @test SamplingParameters(; sampling_type, Teq=5.2) isa SamplingParameters{Float64}
-        @test SamplingParameters(; sampling_type, burnin=1.5) isa SamplingParameters{Float64}
-        @test SamplingParameters(; sampling_type, Teq=5.2, burnin=1.5) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, burnin=1.5) isa
+            SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=5.2, burnin=1.5) isa
+            SamplingParameters{Float64}
         @test SamplingParameters(; sampling_type, Teq=50) isa SamplingParameters{Float64}
-        @test SamplingParameters(; sampling_type, Teq=5, burnin=1.5) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=5, burnin=1.5) isa
+            SamplingParameters{Float64}
     end
 end
 
@@ -38,7 +42,7 @@ end
     # The difference between two samples should be 0
     params = SamplingParameters() # Teq=0, burnin=0
     S, _ = mcmc_sample(g, M, params)
-    @test all(==(0), map(i -> hamming(S[i-1], S[i]),2:M))
+    @test all(==(0), map(i -> hamming(S[i - 1], S[i]), 2:M))
 end
 
 @testset "Output values" begin
@@ -93,22 +97,28 @@ end
     params_discrete = SamplingParameters(; Teq=Int(5), sampling_type=:discrete)
     S_discrete = mcmc_sample(g, M, params_discrete; alignment_output=false).sequences
     @test S_discrete isa AbstractVector{<:PottsEvolver.NumSequence}
-    
+
     # Test continuous case - Float Teq and :continuous sampling_type
-    params_continuous = SamplingParameters(; Teq=5.0, sampling_type=:continuous, step_type=:glauber)
-    S_continuous = mcmc_sample(
-        g, M, params_continuous; alignment_output=false, init=:random_aa
-    ).sequences
+    params_continuous = SamplingParameters(;
+        Teq=5.0, sampling_type=:continuous, step_type=:glauber
+    )
+    S_continuous =
+        mcmc_sample(
+            g, M, params_continuous; alignment_output=false, init=:random_aa
+        ).sequences
     @test S_continuous isa AbstractVector{<:PottsEvolver.AASequence}
     #= NEED TO CHECK TESTS BELOW  =#
     # Test mixed case 1 - Integer Teq but :continuous sampling_type
     # Should convert to continuous
-    params_mixed1 = SamplingParameters(; Teq=Int(5), sampling_type=:continuous, step_type=:metropolis)
-    S_mixed1 = mcmc_sample(
-        g, M, params_mixed1; alignment_output=false, init=:random_codon
-    ).sequences
+    params_mixed1 = SamplingParameters(;
+        Teq=Int(5), sampling_type=:continuous, step_type=:metropolis
+    )
+    S_mixed1 =
+        mcmc_sample(
+            g, M, params_mixed1; alignment_output=false, init=:random_codon
+        ).sequences
     @test S_mixed1 isa AbstractVector{<:PottsEvolver.CodonSequence}
-    
+
     # Test mixed case 2 - Float Teq (convertible to Int) and :discrete sampling_type
     # Should work by converting to Int
     params_mixed2 = SamplingParameters(; Teq=5.0, sampling_type=:discrete)
