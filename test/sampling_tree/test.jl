@@ -10,6 +10,7 @@ import TreeTools.Generate: balanced_binary_tree
     labels = map(label, nodes(tree; skiproot=true))
     for l in labels
         @test branch_length(tree[l]) ≈ branch_length(ptree[l])
+        @test length(ptree[l].data.seq) == 0
     end
     @test ismissing(branch_length(root(ptree)))
     @test data(root(ptree)).seq == rootseq
@@ -53,48 +54,102 @@ end
     g = PottsGraph(L, 21; init=:rand)
     # tree with branches of length one mut
     rootseq = AASequence(L)
-    tree = PottsEvolver.prepare_tree(balanced_binary_tree(8, 1.0), rootseq)
-    params = SamplingParameters(; step_meaning=:changed, Teq=5, burnin=100) # Teq & burnin should not matter!
+    
+    @testset "Discrete" begin
+        tree = PottsEvolver.prepare_tree(balanced_binary_tree(8, 1.0), rootseq)
+        branchlength_meaning = BranchLengthMeaning(:step, :exact)
+        params = SamplingParameters(; 
+            sampling_type=:discrete, 
+            step_meaning=:changed, 
+            Teq=5, # Teq & burnin should not matter!
+            burnin=100, 
+            branchlength_meaning, 
+        ) 
+        tree = PottsEvolver.mcmc_sample_tree!(g, tree, params)
+        for node in nodes(tree; skiproot=true)
+            nseq = data(node).seq
+            aseq = data(ancestor(node)).seq
+            @test hamming(nseq, aseq; normalize=false) == 1
+        end
+    end
 
-    tree = PottsEvolver.mcmc_sample_tree!(g, tree, params)
-    for node in nodes(tree; skiproot=true)
-        nseq = data(node).seq
-        aseq = data(ancestor(node)).seq
-        @test hamming(nseq, aseq; normalize=false) == 1
+    @testset "Continuous" begin
+        tree = PottsEvolver.prepare_tree(balanced_binary_tree(8, 1.0), rootseq)
+        @test all(node -> length(data(node).seq) == 0, nodes(tree; skiproot=true))
+        params = SamplingParameters(;
+            sampling_type=:continuous,
+            step_type=:glauber,
+            Teq=5,
+            burnin=100,
+        )
+        tree = PottsEvolver.mcmc_sample_continuous_tree!(g, tree, params)
+        @test all(node -> length(data(node).seq) == L, nodes(tree; skiproot=true))
     end
 end
 
 @testset "access functions" begin
-    L, q = 10, 21
+    L, q = 15, 21
     g = PottsGraph(L, q; init=:rand)
-    tree = balanced_binary_tree(8, 1.0)
-    params = SamplingParameters(; step_meaning=:changed, Teq=1, burnin=100) # burnin should not matter!
+    tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
+    
+    @testset "Discrete" begin
+        params = SamplingParameters(; 
+            sampling_type=:discrete, step_meaning=:changed, Teq=1, burnin=100
+        ) 
+        # providing root sequence
+        rootseq = CodonSequence(L)
+        sampled_tree = PottsEvolver.mcmc_sample_tree(g, tree, rootseq, params) # burnin should not matter
+        @test tree !== sampled_tree # should be a copy
+        @test data(root(sampled_tree)).seq == rootseq
+        @test data(root(sampled_tree)).seq !== rootseq
 
-    # providing root sequence
-    rootseq = CodonSequence(L)
-    sampled_tree = PottsEvolver.mcmc_sample_tree(g, tree, rootseq, params)
-    @test tree !== sampled_tree # should be a copy
-    @test data(root(sampled_tree)).seq == rootseq
-    @test data(root(sampled_tree)).seq !== rootseq
+        # providing init kwarg and burnin
+        rootseq = PottsEvolver.NumSequence(L, q)
+        sampled_tree = PottsEvolver.mcmc_sample_tree(g, tree, params; init=rootseq)
+        @test tree !== sampled_tree # should be a copy
+        @test data(root(sampled_tree)).seq != rootseq # finite burnin: with probability ≈1 they should be different
 
-    # providing init kwarg and burnin
-    rootseq = PottsEvolver.NumSequence(L, q)
-    sampled_tree = PottsEvolver.mcmc_sample_tree(g, tree, params; init=rootseq)
-    @test tree !== sampled_tree # should be a copy
-    @test data(root(sampled_tree)).seq != rootseq # finite burnin: with probability ≈1 they should be different
+        # providing init kwarg and no burnin
+        params = SamplingParameters(; step_meaning=:accepted, Teq=0, burnin=0) 
+        sampled_tree = @test_logs min_level = Logging.Warn PottsEvolver.mcmc_sample_tree(
+            g, tree, params; init=:random_aa
+        )
+    end
 
-    # providing init kwarg and no burnin
-    params = SamplingParameters(; step_meaning=:accepted, Teq=0, burnin=0) # burnin should not matter!
-    sampled_tree = @test_logs min_level = Logging.Warn PottsEvolver.mcmc_sample_tree(
-        g, tree, params; init=:random_aa
-    )
+    @testset "Continuous" begin
+        params = SamplingParameters(; 
+            sampling_type=:continuous, step_meaning=:changed, Teq=1, burnin=100
+        ) 
+        # providing root sequence
+        rootseq = CodonSequence(L)
+        sampled_tree = PottsEvolver.mcmc_sample_continuous_tree(g, tree, rootseq, params) # burnin should not matter
+        @test tree !== sampled_tree # should be a copy
+        @test data(root(sampled_tree)).seq == rootseq
+        @test data(root(sampled_tree)).seq !== rootseq
+
+        # providing init kwarg and burnin
+        rootseq = PottsEvolver.NumSequence(L, q)
+        sampled_tree = PottsEvolver.mcmc_sample_continuous_tree(
+            g, tree, params; init=rootseq
+        )
+        @test tree !== sampled_tree # should be a copy
+        @test data(root(sampled_tree)).seq != rootseq # finite burnin: with probability ≈1 they should be different
+
+        # providing init kwarg and no burnin
+        params = SamplingParameters(; 
+            sampling_type=:continuous, step_meaning=:accepted, Teq=0, burnin=0
+        ) 
+        sampled_tree = @test_logs min_level = Logging.Warn PottsEvolver.mcmc_sample_continuous_tree(
+            g, tree, params; init=:random_aa
+        )
+    end
 end
 
 @testset "index swap" begin
     L, q = 10, 21
     M = 5
     g = PottsGraph(L, q; init=:rand)
-    tree = balanced_binary_tree(8, 1.0)
+    tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
     params = SamplingParameters(; step_meaning=:changed, Teq=0)
 
     # Test for 'raw' sequence output

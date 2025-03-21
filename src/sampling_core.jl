@@ -1,133 +1,14 @@
-#============================================================#
-##################### SamplingParameters #####################
-#============================================================#
-
-const VALID_STEP_TYPES = [:gibbs, :metropolis]
-const VALID_STEP_MEANINGS = [:proposed, :accepted, :changed]
-
-"""
-```
-BranchLengthMeaning
-
-    type::Symbol
-    length::Symbol
-```
-
-Define how the branch lengths should be interpreted when sampling on a tree.
-This is done in two consecutive steps.
-1. Convert the branch lengths to mcmc steps.
-    If `type==:sweep`, multiply the branch length by the length of the sequence.
-    Else, if `type==:step`, leave it as is.
-2. Convert the branch length to an integer value which will be the number of mcmc steps.
-  - if `length==:exact`, the branch length is expected to be an integer (`rtol=1e-6`).
-  - if `length==:round`, round it to the closest `Int`.
-  - if `length==:poisson`, sample a poisson distribution with the branch length as mean.
-"""
-@kwdef struct BranchLengthMeaning
-    type::Symbol
-    length::Symbol
-    function BranchLengthMeaning(type, length)
-        valid_types = (:step, :sweep)
-        valid_lengths = (:exact, :round, :poisson)
-        @argcheck type in valid_types """
-        `type` field should be in `$(valid_types)`. Instead `:$type`.
-        """
-        @argcheck length in valid_lengths """
-        `length` field should be in `$(valid_lengths)`. Instead `:$length`.
-        """
-        return new(type, length)
-    end
-end
-
-function steps_from_branchlength(τ::Real, p::BranchLengthMeaning, L::Int)
-    if p.type == :sweep
-        τ *= L
-    end
-
-    rtol = 1e-6
-    if p.length == :exact
-        τi = round(Int, τ)
-        if !isapprox(τ, τi; rtol)
-            msg = """
-            Expected tree with approx integer branch lengths (`rtol=$rtol`). Instead $τ.
-            """
-            throw(ArgumentError(msg))
-        end
-        return τi
-    elseif p.length == :round
-        return round(Int, τ)
-    elseif p.length == :poisson
-        return pois_rand(τ)
-    end
-    @assert false "This state should never be reached"
-end
-
-"""
-    mutable struct SamplingParameters
-
-Construct using keyword arguments:
-```
-step_type::Symbol = :gibbs
-step_meaning::Symbol = :accepted
-Teq::Int
-burnin::Int = 5*Teq
-fraction_gap_step::Float64 = 0.9
-branchlength_meaning::BranchLengthMeaning
-```
-
-- `Teq` is measured in swaps: attempted (or accepted) change of one sequence position.
-- `burnin`: number of steps starting from the initial sequence before the first `Teq` are
-    made.
-- `step_meaning` can take three values
-    - `:proposed`: all mcmc steps count towards equilibration
-    - `:accepted`: only accepted steps count (all steps for non-codon Gibbs)
-    - `:changed`: only steps that lead to a change count (Gibbs can resample the same state)
-    *Note*: Gibbs steps for codons are more complicated, since they involve the possibility
-    Metropolis step for gaps, which can be rejected.
-- `branchlength_meaning` is only useful if you sample along branches of a tree.
-  See `?BranchLengthMeaning` for information.
-"""
-@kwdef mutable struct SamplingParameters
-    step_type::Symbol = :gibbs
-    step_meaning::Symbol = :accepted
-    Teq::Int
-    burnin::Int = 5 * Teq
-    fraction_gap_step::Float64 = 0.9
-    branchlength_meaning::BranchLengthMeaning = BranchLengthMeaning(:step, :exact)
-    function SamplingParameters(
-        step_type, step_meaning, Teq, burnin, fraction_gap_step, branchlength_meaning
-    )
-        step_meaning = try
-            Symbol(step_meaning)
-        catch err
-            @error "Invalid `step_meaning` $step_meaning"
-            throw(err)
-        end
-        @argcheck step_meaning in VALID_STEP_MEANINGS """
-                `step_meaning` should be in $VALID_STEP_MEANINGS.
-                Instead $(step_meaning).
-            """
-        @argcheck step_type in VALID_STEP_TYPES """
-                `step_type` should be in $VALID_STEP_TYPES.
-                Instead $(step_type).
-            """
-        return new(
-            step_type, step_meaning, Teq, burnin, fraction_gap_step, branchlength_meaning
-        )
-    end
-end
-
 #=======================================#
 ############## mcmc_steps! ##############
 #=======================================#
 
 """
     mcmc_steps!(
-        s::AbstractSequence, g, num_steps, p::SamplingParameters;
+        s::AbstractSequence, g, num_steps::Integer, p::SamplingParameters;
         gibbs_holder, kwargs...
     )
 
-Perform `num_steps` MCMC steps starting from sequence `s` and using graph `g`.
+Perform `num_steps` discrete MCMC steps starting from sequence `s` and using graph `g`.
 The step type (`:gibbs`, `:metropolis`) and the interpretation of `num_steps`
     (`:changed`, `:accepted`, `:proposed`) is set using `p` (see `?SamplingParameters`).
 Modifies the input sequence `s` and returns it.
@@ -224,6 +105,12 @@ function aa_gibbs_step!(
     i, b, new_codons, new_aas = pick_aa_mutation(s; rng)
     aaref = s.aaseq[i]
 
+    if isnothing(new_aas)
+        # no valid mutation was found - likely due to all gaps sequence
+        return (i=i, new_state=s[i], accepted=accepted, changed=false)
+    end
+
+    # Compute the Boltzmann distribution
     # Constructing the gibbs field p
     for (a, aanew) in enumerate(new_aas)
         if aanew == aaref
@@ -325,7 +212,7 @@ end
 function gibbs_step!(
     s::AbstractSequence,
     g::PottsGraph,
-    p::SamplingParameters,
+    p::SamplingParameters, # not actually used, but the CodonSequence case needs it
     gibbs_holder;
     rng=Random.GLOBAL_RNG,
 )
@@ -367,7 +254,7 @@ Return the position `i`, the base `b`, new potential codons and aas.
 Gap codons cannot be mutated using this.
 """
 function pick_aa_mutation(s::CodonSequence; rng=Random.GLOBAL_RNG)
-    max_cnt = 1000
+    max_cnt = 100
     cnt = 1
     # Pick i and b, and see if we can mutate the codon (if it's a gap we can't)
     @label again
@@ -381,22 +268,6 @@ function pick_aa_mutation(s::CodonSequence; rng=Random.GLOBAL_RNG)
     else
         return i, b, new_codons, new_aas
     end
-end
-
-function softmax!(X)
-    # thanks chatGPT!
-    # Compute the maximum value in X to ensure numerical stability
-    max_val = maximum(X)
-    Z = 0.0
-    @inbounds for i in eachindex(X)
-        X[i] -= max_val
-        X[i] = exp(X[i])
-        Z += X[i]
-    end
-    @inbounds for i in eachindex(X)
-        X[i] /= Z
-    end
-    return X
 end
 
 function sample_from_weights(W)

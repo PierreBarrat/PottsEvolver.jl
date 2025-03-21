@@ -7,13 +7,18 @@
         g::PottsGraph, M::Integer, s0::AbstractSequence, params::SamplingParameters;
         rng=Random.GLOBAL_RNG, verbose=0, progress_meter=true, alignment_output=true,
     )
+    mcmc_sample(
+        g::PottsGraph, M::Integer, params::SamplingParameters; init=:random_num, kwargs...)
+    )
 
-Sample `g` for `M` steps starting from `s0`, using parameters in `params`.
+First form: sample `g` for `M` steps starting from `s0`, using parameters in `params`.
 Return value: named tuple with fields
 - `sequences`: alignment (or vector) of sequences
 - `tvals`: vector with the number of steps at each sample
 - `info`: information about the run
 - `params`: parameters of the run.
+
+Second form: same, but initial sequence is provided through the `init` kwarg.
 
 
 *Note*: this function is not very efficient if `M` is small.
@@ -36,19 +41,15 @@ function mcmc_sample(
 )
     logger = get_logger(verbose, logfile, logfile_verbose)
     with_logger(logger) do
-        mcmc_sample_chain(g, M, s0, params; kwargs...)
+        return if params.sampling_type == :continuous
+            mcmc_sample_continuous_chain(g, M, s0, params; kwargs...)
+        elseif params.sampling_type == :discrete
+            mcmc_sample_chain(g, M, s0, params; kwargs...)
+        else
+            throw(ArgumentError("Invalid sampling type: $(params.sampling_type)"))
+        end
     end
 end
-
-"""
-    mcmc_sample(
-        g::PottsGraph, M::Integer, params::SamplingParameters; init=:random_num, kwargs...)
-    )
-
-Sample `g` for `M` steps, using parameters in `params`.
-Choose the initial sequence based on `init` and `g`.
-See `PottsEvolver.get_init_sequence` for more information.
-"""
 function mcmc_sample(
     g::PottsGraph,
     M::Integer,
@@ -66,7 +67,7 @@ end
 #=================================================================================#
 
 """
-    mcmc_sample(g, tree, M=1, params; alignment_output, translate_output, kwargs...)
+    mcmc_sample(g, tree, M=1, params; alignment_output, translate_output, init, kwargs...)
 
 Sample `g` along branches of `tree`.
 Repeat the process `M` times, returning an array of named tuples of the form
@@ -77,7 +78,7 @@ Sequences in `leaf_sequences` and `internal_sequences` are sorted in post-order 
 The sequence to be used as the root should be provided using the `init` kwarg,
   see `?PottsEvolver.get_init_sequence`.
 
-If `alignment_output`, the sequences will be wrapped into an `Alignment` strucutre.
+If `alignment_output`, the sequences will be wrapped into an `Alignment` structure.
 Otherwise, they are in a dictionary indexed by node label.
 If `translate_output` and if the root sequence was a `CodonSequence`, the output alignment
 will contain the amino acid sequence and not the codons.
@@ -85,12 +86,12 @@ will contain the amino acid sequence and not the codons.
 ## Warning
 The `Teq` field of `params` is not used in the sampling.
 However, the `burnin` field will be used to set the root sequence: `burnin` mcmc steps
-will be performed starting from the input sequence, and the result is set at the root.
+will be performed starting from the input sequence, and the result is placed at the root.
 If you want a precise root sequence to be used, set `burnin=0` in `params`.
 """
 function mcmc_sample(
     g,
-    tree,
+    tree::Tree,
     params;
     verbose=0,
     logfile=nothing,
@@ -102,7 +103,15 @@ function mcmc_sample(
     logger = get_logger(verbose, logfile, logfile_verbose)
     with_logger(logger) do
         # Actual MCMC
-        sampled_tree = mcmc_sample_tree(g, tree, params; kwargs...)
+        sampled_tree = if params.sampling_type == :continuous
+            params = convert(SamplingParameters{FloatType}, params)
+            mcmc_sample_continuous_tree(g, tree, params; kwargs...)
+        elseif params.sampling_type == :discrete
+            params = convert(SamplingParameters{Int}, params)
+            mcmc_sample_tree(g, tree, params; kwargs...)
+        else
+            throw(ArgumentError("Invalid sampling type: $(params.sampling_type)"))
+        end
 
         leaf_names = map(label, traversal(sampled_tree, :postorder; internals=false))
         internal_names = map(label, traversal(sampled_tree, :postorder; leaves=false))
@@ -130,7 +139,7 @@ function mcmc_sample(
         )
     end
 end
-function mcmc_sample(g, tree, M::Int, params; kwargs...)
+function mcmc_sample(g, tree::Tree, M::Int, params; kwargs...)
     # M sequences per node --> [(tree, leaf, internals)] of length `M`
     return [mcmc_sample(g, tree, params; kwargs...) for _ in 1:M]
 end
@@ -180,7 +189,7 @@ function get_init_sequence(s0::AbstractVector{<:Integer}, g; verbose=true)
         if maximum(s0) <= 21
             AASequence(s0)
         elseif 21 < maximum(s0) <= 65
-            CodonSequence(s0)
+            CodonSequence(s0; source=:codon)
         else
             error("Sequence $s0 incompatible with graph of size $(size(g))")
         end

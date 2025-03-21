@@ -48,6 +48,13 @@ mutable struct AASequence{T<:Integer} <: AbstractSequence
 end
 
 Base.copy(s::AASequence) = AASequence(copy(s.seq))
+function Base.copy!(dest::AASequence, source::AASequence)
+    @argcheck length(dest) == length(source)
+    for (i, a) in enumerate(source.seq)
+        dest.seq[i] = a
+    end
+    return dest
+end
 """
     AASequence(L; T)
 
@@ -92,9 +99,11 @@ Build a `CodonSequence` from `seq`:
 - if `source==:aa`, `seq` is interpreted as representing amino acids (see `aa_alphabet`);
   matching codons are randomly chosen using the `PottsEvolver.reverse_code_rand` method.
 """
-function CodonSequence(seq::AbstractVector{T}; source=:codon) where {T<:Integer}
+function CodonSequence(seq::AbstractVector{T}; source=:aa) where {T<:Integer}
     return if source == :aa
-        CodonSequence(map(reverse_code_rand, seq), convert(Vector{T}, seq))
+        CodonSequence(
+            convert(Vector{T}, map(reverse_code_rand, seq)), convert(Vector{T}, seq)
+        )
     elseif source == :codon
         aaseq = map(genetic_code, seq)
         any(isnothing, aaseq) && error("""
@@ -109,8 +118,8 @@ end
     CodonSequence(L::Int; source=:aa, T)
 
 Sample `L` states at random of the type of `source` (`:aa` or `:codon`):
-    - if `:codon`, sample codons at random
-    - if `:aa`, sample amino acids at random and reverse translate them randomly to matching codons
+- if `:codon`, sample codons at random
+- if `:aa`, sample amino acids at random and reverse translate them randomly to matching codons
 
 Underlying integer type is `T`.
 """
@@ -127,6 +136,14 @@ function Base.setindex!(s::CodonSequence, x::Integer, i)
     return setindex!(s.seq, x, i)
 end
 Base.copy(s::CodonSequence) = CodonSequence(copy(s.seq), copy(s.aaseq))
+function Base.copy!(dest::CodonSequence, source::CodonSequence)
+    @argcheck length(dest) == length(source)
+    for (i, (c, aa)) in enumerate(zip(source.seq, source.aaseq))
+        dest.seq[i] = c
+        dest.aaseq[i] = aa
+    end
+    return dest
+end
 
 translate(s::CodonSequence) = AASequence(s.aaseq)
 function sequence(x::CodonSequence; as_codons=true)
@@ -190,6 +207,13 @@ end
 NumSequence(L::Integer, q::Integer; T=IntType) = NumSequence{T,q}(L)
 
 Base.copy(x::NumSequence{T,q}) where {T,q} = NumSequence(copy(x.seq), q)
+function Base.copy!(dest::NumSequence{T,q}, source::NumSequence{T,q}) where {T,q}
+    @argcheck length(source) == length(dest)
+    for (i,a) in enumerate(sequence(source))
+        dest.seq[i] = a
+    end
+    return dest
+end
 
 function Base.getproperty(x::NumSequence{T,q}, sym::Symbol) where {T,q}
     if sym == :q

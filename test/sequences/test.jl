@@ -17,6 +17,12 @@
     aa_seq_copy = copy(aa_seq)
     @test aa_seq_copy == aa_seq
     @test pointer(aa_seq.seq) != pointer(aa_seq_copy.seq)
+
+    # Test in place copy
+    aa_seq_2 = AASequence([5, 4, 3, 2, 1])
+    copy!(aa_seq_copy, aa_seq_2)
+    @test aa_seq_copy == AASequence([5, 4, 3, 2, 1])
+    @test pointer(aa_seq_copy.seq) != pointer(aa_seq_2.seq)
 end
 
 #=============================================#
@@ -36,7 +42,7 @@ end
         # Create an example codon sequence with matching amino acids
         codons = Int8.([1, 2, 3, 6, 7])
         aas = map(genetic_code, codons)
-        codon_seq = CodonSequence(codons)
+        codon_seq = CodonSequence(codons; source=:codon)
 
         # Test constructing the object
         @test codon_seq isa CodonSequence{Int8}
@@ -53,6 +59,18 @@ end
         @test codon_seq_copy == codon_seq
         @test pointer(codon_seq.seq) != pointer(codon_seq_copy.seq)
         @test pointer(codon_seq.aaseq) != pointer(codon_seq_copy.aaseq)
+
+        # Test in place copy
+        codon_seq_2 = CodonSequence(Int8.([7, 6, 3, 2, 1]); source=:codon)
+        copy!(codon_seq_copy, codon_seq_2)
+        @test codon_seq_2.seq == Int8.([7, 6, 3, 2, 1])
+        @test codon_seq_copy.seq == codon_seq_2.seq
+        @test codon_seq_copy.aaseq == codon_seq_2.aaseq
+        @test pointer(codon_seq_copy.seq) != pointer(codon_seq_2.seq)
+
+        # Test fail in place copy when different lengths
+        codon_seq_3 = CodonSequence(Int8.([7, 6, 3, 2]); source=:codon)
+        @test_throws ArgumentError copy!(codon_seq_copy, codon_seq_3)
     end
 end
 
@@ -84,6 +102,14 @@ end
     # Test manually copying
     num_seq_copy = NumSequence{T,q}(copy(PottsEvolver.sequence(num_seq)))
     @test num_seq_copy == num_seq
+
+    # Test in place copy
+    num_seq_2 = NumSequence{T, T(q)}(ones(Int, L))
+    num_seq_3 = NumSequence(ones(Int, L), 4) # will be NumSequence{Int, 4}, but q above is 5
+    copy!(num_seq_copy, num_seq_2)
+    @test num_seq_copy == num_seq_2
+    @test pointer(num_seq_copy.seq) != pointer(num_seq_2.seq)
+    @test_throws MethodError copy!(num_seq_3, num_seq_2)
 
     # Test failures
     @test_throws ArgumentError NumSequence([1, 2, 3]) # need to provide q

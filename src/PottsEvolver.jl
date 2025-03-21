@@ -2,11 +2,13 @@ module PottsEvolver
 
 using ArgCheck
 using BioSequenceMappings
+using Distributions
 using Logging
 using LoggingExtras
 using PoissonRandom
 using ProgressMeter
 using Random
+using ReadOnlyArrays
 using StatsBase
 using TreeTools
 using UnPack
@@ -14,8 +16,8 @@ using UnPack
 export read_fasta, symbols # from BioSequenceMappings
 export read_tree # from TreeTools
 
-import Base: ==, hash
-import Base: copy, show, write
+import Base: ==, hash, isvalid
+import Base: convert, copy, copy!, show, write
 import Base: getindex, setindex!
 import Base: iterate, length, eltype, size
 
@@ -23,12 +25,12 @@ import BioSequenceMappings: Alignment, to_string, hamming
 export Alignment, Alphabet
 
 # Default types for numerical quantities
-const IntType = UInt8
+const IntType = Int64
 const FloatType = Float64
 
 include("codons.jl")
 export codon_alphabet, aa_alphabet, nt_alphabet
-export bases, genetic_code
+export genetic_code
 
 include("sequences.jl")
 export AbstractSequence, AASequence, CodonSequence, NumSequence
@@ -42,11 +44,16 @@ export energy
 # public set_gauge!
 #! format: on
 
-include("sampling_core.jl")
+include("sampling_parameters.jl")
 export BranchLengthMeaning, SamplingParameters
+
+include("sampling_core.jl")
 #! format: off
 # public mcmc_steps!, steps_from_branchlength
 #! format: on
+
+include("sampling_continuous_core.jl")
+
 
 include("sampling_chain.jl")
 #! format: off

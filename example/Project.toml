@@ -1,6 +1,8 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 BioSequenceMappings = "a84bc454-70cc-4f51-8a9d-ca76a5a82222"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+EasyFit = "fde71243-0cda-4261-b7c7-4845bd106b21"
 Infiltrator = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"

@@ -2,6 +2,21 @@
     @test SamplingParameters(; Teq=5) isa Any
     @test_throws ArgumentError SamplingParameters(; Teq=5, step_type=:dubstep)
     @test_throws ArgumentError SamplingParameters(; Teq=5, step_meaning=:olive_tree)
+
+    @testset "Construction" begin
+        sampling_type = :discrete
+        @test_throws ArgumentError SamplingParameters(; sampling_type, Teq=5.2) # discrete needs integer times
+        @test_throws ArgumentError SamplingParameters(; sampling_type, burnin=1.5)  # discrete needs integer times
+        @test_throws ArgumentError SamplingParameters(; sampling_type, Teq=5.2, burnin=1.5)  # type of Teq determines type of burnin
+        @test SamplingParameters(; sampling_type, Teq=5., burnin=1.) isa SamplingParameters{Int}
+
+        sampling_type = :continuous # everything should work and give SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=5.2) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, burnin=1.5) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=5.2, burnin=1.5) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=50) isa SamplingParameters{Float64}
+        @test SamplingParameters(; sampling_type, Teq=5, burnin=1.5) isa SamplingParameters{Float64}
+    end
 end
 
 @testset "Accepted steps" begin
@@ -19,12 +34,17 @@ end
     H = map(i -> hamming(S[i - 1], S[i]; normalize=false), 2:M)
     acc_ratio_1 = sum(H) / length(H)
     @test acc_ratio_1 < 1
+
+    # The difference between two samples should be 0
+    params = SamplingParameters() # Teq=0, burnin=0
+    S, _ = mcmc_sample(g, M, params)
+    @test all(==(0), map(i -> hamming(S[i-1], S[i]),2:M))
 end
 
 @testset "Output values" begin
     L, q, M = (4, 21, 2)
     g = PottsGraph(L, q; init=:rand)
-    @test g.alphabet == aa_alphabet # used q = 21
+    @test g.alphabet == aa_alphabet
 
     params = SamplingParameters(; Teq=1)
 
@@ -34,20 +54,13 @@ end
     @test S isa AbstractVector{<:PottsEvolver.NumSequence}
 
     # because g has no alphabet
-    g_noalphabet = let
-        x = deepcopy(g)
-        x.alphabet = nothing
-        x
-    end
+    g_noalphabet = PottsGraph(L, q; init=:rand, alphabet=nothing)
     S, _ = mcmc_sample(g_noalphabet, M, params; init=[1, 2, 3, 4], alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.NumSequence}
 
     # because g has an alphabet that is not the default aa
-    g_strangealphabet = let
-        x = deepcopy(g)
-        x.alphabet = Alphabet("ACDEFGHIKLMNPQRSTVWY-")
-        x
-    end
+    alphabet = Alphabet("ACDEFGHIKLMNPQRSTVWY-")
+    g_strangealphabet = PottsGraph(L, q; init=:rand, alphabet)
     S, _ = mcmc_sample(
         g_strangealphabet, M, params; init=[1, 2, 3, 4], alignment_output=false
     )
@@ -70,4 +83,35 @@ end
     # because g has aa_alphabet and init vector has elements > 21
     S, _ = mcmc_sample(g, M, params; init=[1, 2, 3, 22], alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.CodonSequence}
+end
+
+@testset "Continuous/discrete dispatch" begin
+    L, q, M = (4, 21, 2)
+    g = PottsGraph(L, q; init=:rand)
+
+    # Test discrete case - Integer Teq and :discrete sampling_type
+    params_discrete = SamplingParameters(; Teq=Int(5), sampling_type=:discrete)
+    S_discrete = mcmc_sample(g, M, params_discrete; alignment_output=false).sequences
+    @test S_discrete isa AbstractVector{<:PottsEvolver.NumSequence}
+    
+    # Test continuous case - Float Teq and :continuous sampling_type
+    params_continuous = SamplingParameters(; Teq=5.0, sampling_type=:continuous, step_type=:glauber)
+    S_continuous = mcmc_sample(
+        g, M, params_continuous; alignment_output=false, init=:random_aa
+    ).sequences
+    @test S_continuous isa AbstractVector{<:PottsEvolver.AASequence}
+    #= NEED TO CHECK TESTS BELOW  =#
+    # Test mixed case 1 - Integer Teq but :continuous sampling_type
+    # Should convert to continuous
+    params_mixed1 = SamplingParameters(; Teq=Int(5), sampling_type=:continuous, step_type=:metropolis)
+    S_mixed1 = mcmc_sample(
+        g, M, params_mixed1; alignment_output=false, init=:random_codon
+    ).sequences
+    @test S_mixed1 isa AbstractVector{<:PottsEvolver.CodonSequence}
+    
+    # Test mixed case 2 - Float Teq (convertible to Int) and :discrete sampling_type
+    # Should work by converting to Int
+    params_mixed2 = SamplingParameters(; Teq=5.0, sampling_type=:discrete)
+    S_mixed2, _ = mcmc_sample(g, M, params_mixed2; alignment_output=false, init=:random_num)
+    @test S_mixed2 isa AbstractVector{<:PottsEvolver.NumSequence}
 end

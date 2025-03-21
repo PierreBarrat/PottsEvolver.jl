@@ -26,11 +26,13 @@
 end
 
 """
-    PottsGraph(L, q[, T]; init = :null)
+    PottsGraph(L, q[, T]; init = :null, alphabet)
 
 Return a `PottsGraph{T}` of the required size.
 - `init == :null`: parameters are intialized to zero.
 - `init == :rand`: parameters are randomly sampled using `Jrand` and `hrand` keywords.
+
+`alphabet` is `aa_alphabet` if `q=21`, `nothing` otherwise.
 
 ## Random initialization
 
@@ -48,14 +50,8 @@ function PottsGraph(
     init=:null,
     Jrand=N -> 1 / L * randn(N, N),
     hrand=N -> 1 / sqrt(L) * randn(N),
+    alphabet=(q == 21 ? aa_alphabet : nothing),
 )
-    # If a default alphabet (binary, nucleotides, etc...) matches `q`, use it
-    # Otherwise, do not use an alphabet
-    alphabet = let
-        A = convert(IntType, BioSequenceMappings.default_alphabet(q))
-        q == length(A) ? A : nothing
-    end
-
     return if init == :null
         PottsGraph(; J=zeros(T, q, q, L, L), h=zeros(T, q, L), alphabet)
     elseif init == :rand
@@ -159,8 +155,29 @@ end
 #==================#
 ####### Misc #######
 #==================#
+function softmax!(X)
+    # thanks chatGPT!
+    # Compute the maximum value in X to ensure numerical stability
+    max_val = maximum(X)
+    Z = 0.0
+    @inbounds for i in eachindex(X)
+        X[i] -= max_val
+        X[i] = exp(X[i])
+        Z += X[i]
+    end
+    @inbounds for i in eachindex(X)
+        X[i] /= Z
+    end
+    return X
+end
 
+"""
+    energy(s, g::PottsGraph)
+
+Energy of sequence `s` in `g`.
+"""
 function energy(s::AbstractVector{<:Integer}, g::PottsGraph)
+    @argcheck length(s) == size(g).L "Lengths of sequence and model do not match"
     (; L, q) = size(g)
     E = 0.0
     for i in 1:L
@@ -181,4 +198,31 @@ end
 function Base.show(io::IO, x::MIME"text/plain", g::PottsGraph{T}) where {T}
     (; L, q) = size(g)
     return print(io, "PottsGraph{$T}: dimensions (L=$L, q=$q) -- β=$(g.β) -- $(g.alphabet)")
+end
+
+function context_dependent_entropy(s::AbstractSequence, g::PottsGraph)
+    (; q, L) = size(g)
+    f = zeros(Float64, q)
+
+    CDE = 0.
+    for (i, a_ref) in enumerate(s.seq)
+        for b in 1:q
+            if b == a_ref
+                f[b] = 0.
+                continue
+            end
+
+            ΔE = g.h[b, i] - g.h[a_ref, i]
+            for j in 1:L
+                if j != i
+                    ΔE += g.J[b, s.seq[j], i, j] - g.J[a_ref, s[j], i, j]
+                end
+            end
+            f[b] = g.β * ΔE
+        end
+        softmax!(f)
+        CDE += entropy(f)
+    end
+
+    return CDE
 end

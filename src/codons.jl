@@ -3,6 +3,7 @@
 #==================================================================#
 
 const nucleotides = ['A', 'C', 'G', 'T']
+const _nucleotides_gap = ['A', 'C', 'G', 'T', '-']
 """
     aa_alphabet
     nt_alphabet
@@ -25,7 +26,16 @@ const nt_alphabet = Alphabet(nucleotides, IntType)
     b1::Char
     b2::Char
     b3::Char
+    function Codon(b1, b2, b3)
+        @argcheck b1 in _nucleotides_gap && b2 in _nucleotides_gap && b3 in _nucleotides_gap
+         return new(b1, b2, b3)
+    end
 end
+function Codon(s::AbstractString)
+    @argcheck length(s) == 3
+    return Codon(s[1], s[2], s[3])
+end
+
 """
     bases(codon)
 
@@ -42,7 +52,7 @@ Default alphabets for `PottsEvolver`.
 """
 const codon_alphabet = let
     nt = nucleotides
-    C = vec(map(x -> Codon(x...), Iterators.product(nt, nt, nt)))
+    C = vec(map(x -> Codon(x...), Iterators.product(nt, nt, nt))) # AAA CAA GAAA etc... (first changes fastest)
     pushfirst!(C, Codon('-', '-', '-'))
     Alphabet(C, IntType)
 end
@@ -50,21 +60,23 @@ end
 #==========================================#
 ############### Genetic code ###############
 #==========================================#
-#! format: off
+
 const aa_order = [
 'K', 'N', 'K', 'N', 'T', 'T', 'T', 'T', 'R', 'S', 'R', 'S', 'I', 'I', 'M', 'I', 'Q', 'H', 'Q', 'H', 'P', 'P', 'P', 'P', 'R', 'R', 'R', 'R', 'L', 'L', 'L', 'L', 'E', 'D', 'E', 'D', 'A', 'A', 'A', 'A', 'G', 'G', 'G', 'G', 'V', 'V', 'V', 'V', '*', 'Y', '*', 'Y', 'S', 'S', 'S', 'S', '*', 'C', 'W', 'C', 'L', 'F', 'L', 'F'
 ]
-#! format: on
+
+# Dictionary from Codon to Char
 const _genetic_code_struct = let
     code = Dict{Codon,Char}()
     i = 1
-    for a in nucleotides, b in nucleotides, c in nucleotides
+    for a in nucleotides, b in nucleotides, c in nucleotides # last changes fastest, this is ok
         code[Codon(a, b, c)] = aa_order[i]
         i += 1
     end
     code[Codon('-', '-', '-')] = '-'
     code
 end
+# Dictionary from Codon to Int
 const _genetic_code_integers = let
     code = Dict{IntType,Union{Nothing,IntType}}()
     for (codon, aa) in _genetic_code_struct
@@ -89,17 +101,32 @@ Translate `c` and return the amino acid as a `Char`.
 """
 genetic_code(codon::Codon) = _genetic_code_struct[codon]
 
+
+const _reverse_code_integers = let
+    rcode = Vector{Vector{IntType}}(undef, length(aa_alphabet))
+    for aa in 1:length(aa_alphabet)
+        codons = findall(codon_alphabet.index_to_char) do c
+            genetic_code(c) == aa_alphabet(aa)
+        end
+        rcode[aa] = IntType.(codons)
+    end
+    rcode
+end
+const _reverse_code_struct = let
+    rcode = Dict{Char, Vector{Codon}}()
+    for aa in symbols(aa_alphabet)
+        rcode[aa] = map(codon_alphabet, _reverse_code_integers[aa_alphabet(aa)])
+    end
+    rcode
+end
+
 """
     reverse_code(aa)
 
 Return the set of codons coding for `aa`.
 """
-function reverse_code(aa::T) where {T<:Integer}
-    return T.(
-        findall(c -> genetic_code(c) == aa_alphabet(aa), codon_alphabet.index_to_char)
-    )
-end
-reverse_code(aa::AbstractChar) = map(codon_alphabet, reverse_code(aa_alphabet(aa)))
+reverse_code(aa::T) where {T<:Integer} = _reverse_code_integers[aa]
+reverse_code(aa::AbstractChar) = _reverse_code_struct[aa]
 """
     reverse_code_rand(aa)
 
@@ -150,7 +177,7 @@ end
 # Only all gaps or all nt codons are valid
 # Anything else means a frameshift and I do not deal with that here
 isgap(c::Codon) = all(==('-'), bases(c))
-function isvalid(c::Codon)
+function Base.isvalid(c::Codon)
     return if isgap(c)
         true
     elseif all(in(nucleotides), bases(c))
@@ -197,8 +224,11 @@ what other codons are accessible by one mutation?
 !!! I consider here that a codon is always accessible from itself! *i.e.* `c` will appear in the list
 =#
 
-const _codon_access_map = let
-    M = Dict{Tuple{IntType,IntType},Tuple{Vector{IntType},Vector{IntType}}}()
+function _build_codon_access_map()
+    M = Dict{
+        Tuple{IntType,IntType},
+        Tuple{ReadOnlyVector{IntType}, ReadOnlyVector{IntType}}
+    }()
     for c in 1:length(codon_alphabet), i in 1:3
         codon = codon_alphabet(c)
         if !isgap(codon) && isvalid(codon)
@@ -208,18 +238,85 @@ const _codon_access_map = let
                 codon_alphabet(Codon(nts...))
             end
             filter!(!isstop, accessible_codons)
-            M[c, i] = (accessible_codons, map(genetic_code, accessible_codons))
+            M[c, i] = (
+                ReadOnlyArray(accessible_codons),
+                ReadOnlyArray(map(genetic_code, accessible_codons))
+            )
         end
     end
     M
 end
+const _codon_access_map = _build_codon_access_map()
+
+#=
+Similar to the above, with the following differences.
+- Stores all codons accessible by any nucleotide or gap mutation. Consequently, keys are `IntType` (just the codon)
+- Gap mutations are counted: the gap codon is accessible from all codons, and all codons are accessible from the gap.
+- A codon is not accessible from itself (this is used for continuous time sampling).
+=#
+function _build_codon_access_map_2()
+    M = Dict{IntType,Tuple{ReadOnlyVector{IntType},ReadOnlyVector{IntType}}}()
+
+    for c in 1:length(codon_alphabet)
+        codon = codon_alphabet(c)
+        isstop(codon) && continue
+
+        # Gap case first
+        if isgap(codon)
+            accessible_codons = collect(1:length(codon_alphabet))
+            filter!(c -> iscoding(codon_alphabet(c)), accessible_codons) # remove all non-coding (i.e. gap and stop)
+            M[c] = (
+                ReadOnlyArray(accessible_codons),
+                ReadOnlyArray(map(genetic_code, accessible_codons))
+            )
+            continue
+        end
+
+
+        # general case
+        accessible_codons = IntType[]
+        # check all mutations, filter for coding codons
+        for b in 1:3, nt in nucleotides
+            nts = collect(bases(codon))
+            nts[b] = nt
+            new_codon = Codon(nts...)
+            if iscoding(new_codon) && new_codon != codon
+                push!(accessible_codons, codon_alphabet(new_codon))
+            end
+        end
+        # add gap codon
+        push!(accessible_codons, codon_alphabet(Codon("---")))
+        # store
+        M[c] = (
+            ReadOnlyArray(accessible_codons),
+            ReadOnlyArray(map(genetic_code, accessible_codons))
+        )
+    end
+
+    return M
+end
+
+const _codon_access_map_2 = _build_codon_access_map_2()
+
 """
     accessible_codons(codon, b::Integer)
 
 Return all codons/amino-acids accessible by mutating `codon` at base `b`.
 Value returned is a `Tuple` whose first/second elements represent codons/amino-acids.
+`codon` itself (and the corresponding amino-acid) is included in the result.
+
+# Examples
+```jldoctest
+julia> seq = CodonSequence([1,2,3]); # codons 1, 2, and 3
+
+julia> PottsEvolver.accessible_codons(seq[1], 1) # mutating the gap codon is undefined
+(nothing, nothing)
+
+julia> PottsEvolver.accessible_codons(seq[2], 1) # mutating codon 2 at base 1 gives access to 2 others
+(UInt8[0x02, 0x03, 0x04], UInt8[0x0a, 0x0f, 0x05])
+```
 """
-function accessible_codons(codon::T, b::Integer) where {T<:Integer}
+function accessible_codons(codon::Integer, b::Integer)
     return get(_codon_access_map, (codon, b), (nothing, nothing))
 end
 function accessible_codons(codon::Codon, b::Integer)
@@ -231,6 +328,34 @@ function accessible_codons(codon::Codon, b::Integer)
     end
 end
 
+"""
+    accessible_codons(codon)
+
+Return all codons/amino-acids accessible by mutating `codon` at any base.
+Value returned is a `Tuple` whose first/second elements represent codons/amino-acids.
+`codon` itself (and the corresponding amino-acid) is **not** included in the result.
+This differs from the two argument version.
+
+This function differs from the two argument version:
+- the gap codon is accessible from all other codons;
+- a codon is not accessible from itself;
+- any codon is accessible from the gap codon.
+
+All non-gap codons are considered accessible from the gap codon.
+"""
+function accessible_codons(codon::Integer)
+    return get(_codon_access_map_2, codon, (nothing, nothing))
+end
+function accessible_codons(codon::Codon)
+    Cs = get(_codon_access_map_2, codon_alphabet(codon), nothing)
+    return if isnothing(Cs)
+        Codon[], Char[]
+    else
+        map(codon_alphabet, Cs[1]), map(aa_alphabet, Cs[2])
+    end
+end
+
+
 #===========================================================================#
 ########################## Amino acid degeneracies ##########################
 #===========================================================================#
@@ -239,3 +364,37 @@ const _aa_degeneracy = Dict{IntType,FloatType}(
     a => log(length(reverse_code(a))) for a in 1:length(aa_alphabet)
 )
 aa_degeneracy(a::Integer) = get(_aa_degeneracy, a, -Inf)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
