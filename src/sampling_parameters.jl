@@ -195,7 +195,7 @@ can be used directly.
 end
 
 function Base.show(io::IO, params::SamplingParameters)
-    println(io, "SamplingParameters:")
+    println(io, typeof(params))
     println(io, "  sampling_type = :$(params.sampling_type)")
     println(io, "  step_type = :$(params.step_type)")
     println(io, "  Teq = $(params.Teq)")

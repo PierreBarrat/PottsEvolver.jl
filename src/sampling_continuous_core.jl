@@ -232,20 +232,19 @@ function average_transition_rate(
     # params default to Teq=10*L and default of SamplingParameters for the rest
     params = isnothing(params) ? SamplingParameters(; Teq=L * 10) : params
 
-    sample_eq =
-        mcmc_sample(
-            g,
-            n_samples,
-            params;
-            alignment_output=false,
-            init=s0,
-            rng=rng,
-            progress_meter=progress_meter,
-        ).sequences
+    sample_eq = mcmc_sample(
+        g,
+        n_samples,
+        params;
+        alignment_output=false,
+        init=s0,
+        rng=rng,
+        progress_meter=progress_meter,
+    ).sequences
     return average_transition_rate(g, step_type, sample_eq)
 end
 function average_transition_rate(
-    g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}
+    g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}; kwargs...
 )
     state = CTMCState(S[1])
     Rmean = mean(S) do sequence

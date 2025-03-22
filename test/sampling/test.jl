@@ -24,20 +24,32 @@
 end
 
 @testset "Accepted steps" begin
-    L, q, M = (5, 3, 500)
+    L, q, M = (5, 3, 100)
     g = PottsGraph(L, q; init=:rand)
 
     # the difference between two samples should always be exactly one.
-    params = SamplingParameters(; step_meaning=:changed, Teq=1)
-    S, _ = mcmc_sample(g, M, params)
+    params = SamplingParameters(; step_meaning=:changed, Teq=1, burnin=3)
+    S, tvals, _ = mcmc_sample(g, M, params)
     @test unique(map(i -> hamming(S[i - 1], S[i]; normalize=false), 2:M)) == [1]
+    @test tvals == collect(3 .+ (0:((M-1))))
 
-    # the difference between two samples should be less than one (!! this is a statistically true test, but could be false!)
+    # difference from init should be 1, then no changes
+    params = SamplingParameters(; step_meaning=:changed, Teq=0, burnin=1)
+    s0 = NumSequence(L, q)
+    S, tvals, _ = mcmc_sample(g, M, s0, params)
+    @test tvals == 1 .+ zeros(Int, M)
+    @test allequal(S)
+    @test hamming(S[1], s0.seq; normalize=false) == 1
+
+    # the difference between two samples should be strictly less than one
+    # (!! this is a statistically true test, but could be false!)
+    params = SamplingParameters(; step_meaning=:changed, Teq=1, burnin=0)
     params = @set params.step_meaning = :accepted
-    S, _ = mcmc_sample(g, M, params)
+    S, tvals, _ = mcmc_sample(g, M, params)
     H = map(i -> hamming(S[i - 1], S[i]; normalize=false), 2:M)
     acc_ratio_1 = sum(H) / length(H)
     @test acc_ratio_1 < 1
+    @test tvals == collect(0 .+ (0:(M-1)))
 
     # The difference between two samples should be 0
     params = SamplingParameters() # Teq=0, burnin=0
@@ -124,4 +136,85 @@ end
     params_mixed2 = SamplingParameters(; Teq=5.0, sampling_type=:discrete)
     S_mixed2, _ = mcmc_sample(g, M, params_mixed2; alignment_output=false, init=:random_num)
     @test S_mixed2 isa AbstractVector{<:PottsEvolver.NumSequence}
+end
+
+@testset "Sampling with time values" begin
+    L, q = 10, 5
+    g = PottsGraph(L, q)
+
+    @testset "Errors" begin
+        params_discrete = SamplingParameters(;sampling_type=:discrete)
+        params_continuous = SamplingParameters(;sampling_type=:continuous)
+
+        tvals = [0, 2, 1]
+        @test_throws ArgumentError mcmc_sample(g, tvals, params_discrete)
+        @test_throws MethodError mcmc_sample(g, tvals, params_continuous) # tvals is Ints
+        @test_throws ArgumentError mcmc_sample(g, Float64.(tvals), params_continuous)
+
+        tvals = [-1, 0, 1]
+        @test_throws ArgumentError mcmc_sample(g, tvals, params_discrete)
+        @test_throws MethodError mcmc_sample(g, tvals, params_continuous)
+        @test_throws ArgumentError mcmc_sample(g, Float64.(tvals), params_continuous)
+
+        tvals = [0., 1., 2.]
+        @test_throws MethodError mcmc_sample(g, tvals, params_discrete)
+    end
+
+    # test in discrete case
+    @testset "Discrete" begin
+        sampling_type = :discrete
+
+        time_steps = 0:20
+        M = length(time_steps)
+
+        # the difference between two samples should always be exactly one.
+        params = SamplingParameters(; sampling_type, step_meaning=:changed, Teq=4, burnin=0)
+        S, tvals, _ = mcmc_sample(g, time_steps, params)
+        @test length(S) == M
+        @test unique(map(i -> hamming(S[i - 1], S[i]; normalize=false), 2:M)) == [1]
+        @test tvals == time_steps
+
+        # the difference between two samples should be strictly less than one
+        # (!! this is a statistically true test, but could be false!)
+        params = SamplingParameters(; step_meaning=:accepted, sampling_type)
+        S, tvals, _ = mcmc_sample(g, time_steps, params)
+        @test length(S) == M
+        @test tvals == time_steps
+        H = map(i -> hamming(S[i - 1], S[i]; normalize=false), 2:M)
+        acc_ratio_1 = sum(H) / length(H)
+        @test acc_ratio_1 < 1
+
+        # The difference between two samples should be 0
+        time_steps = [0, 0, 0]
+        M = 3
+        params = SamplingParameters(; sampling_type)
+        S, _ = mcmc_sample(g, time_steps, params)
+        @test length(S) == M
+        @test all(==(0), map(i -> hamming(S[i - 1], S[i]), 2:M))
+
+        # burnin and changed
+        params = SamplingParameters(; sampling_type, step_meaning=:changed)
+        time_steps = [1]
+        s0 = NumSequence(L, q)
+        S, tvals, _ = mcmc_sample(g, time_steps, s0, params)
+        @test hamming(S[1], s0.seq; normalize=false) == 1
+    end
+
+    @testset "Continuous" begin
+        sampling_type = :continuous
+        params = SamplingParameters(; sampling_type, step_meaning=:changed, Teq=4, burnin=0)
+
+        time_steps = range(0, 3, length=5)
+        S, tvals, _ = mcmc_sample(g, time_steps, params)
+        @test length(S) == length(time_steps)
+        @test tvals == time_steps
+
+        time_steps = 3. .+ zeros(Float64, 5)
+        s0 = NumSequence(L, q)
+        S, tvals, _ = mcmc_sample(g, time_steps, s0, params)
+        @test length(S) == length(time_steps)
+        @test tvals == time_steps
+        @test allequal(S)
+        @test S[1] != s0.seq
+    end
 end

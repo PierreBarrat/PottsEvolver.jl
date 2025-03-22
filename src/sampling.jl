@@ -29,9 +29,33 @@ it is used if `init::CodonSequence`, otherwise not.
 """
 function mcmc_sample end
 
+function mcmc_sample(g::PottsGraph, M::Integer, s0::AbstractSequence, params; kwargs...)
+    @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
+
+    @unpack Teq, burnin = params
+    @argcheck Teq >= 0 && burnin >=0
+    tvals = if Teq > 0
+        burnin .+ range(0, (M-1)*Teq, step=Teq)
+    else
+        burnin .+ zeros(Int, M)
+    end
+    if params.sampling_type == :continuous
+        tvals = Float64.(tvals)
+    end
+
+    return mcmc_sample(g, tvals, s0, params; kwargs...)
+end
+function mcmc_sample(
+    g::PottsGraph, M::Integer, params::SamplingParameters;
+    init=:random_num, verbose=0, kwargs...
+)
+    s0 = get_init_sequence(init, g; verbose)
+    return mcmc_sample(g, M, s0, params; verbose, kwargs...)
+end
+
 function mcmc_sample(
     g::PottsGraph,
-    M::Int,
+    tvals::AbstractVector,
     s0::AbstractSequence,
     params::SamplingParameters;
     verbose=0,
@@ -42,9 +66,9 @@ function mcmc_sample(
     logger = get_logger(verbose, logfile, logfile_verbose)
     with_logger(logger) do
         return if params.sampling_type == :continuous
-            mcmc_sample_continuous_chain(g, M, s0, params; kwargs...)
+            mcmc_sample_continuous_chain(g, tvals, s0, params; kwargs...)
         elseif params.sampling_type == :discrete
-            mcmc_sample_chain(g, M, s0, params; kwargs...)
+            mcmc_sample_chain(g, tvals, s0, params; kwargs...)
         else
             throw(ArgumentError("Invalid sampling type: $(params.sampling_type)"))
         end
@@ -52,14 +76,14 @@ function mcmc_sample(
 end
 function mcmc_sample(
     g::PottsGraph,
-    M::Integer,
+    tvals::AbstractVector,
     params::SamplingParameters;
     init=:random_num,
     verbose=0,
     kwargs...,
 )
     s0 = get_init_sequence(init, g; verbose)
-    return mcmc_sample(g, M, s0, params; verbose, kwargs...)
+    return mcmc_sample(g, tvals, s0, params; verbose, kwargs...)
 end
 
 #=================================================================================#
@@ -216,7 +240,7 @@ function get_logger(verbose, logfile, logfile_verbose)
     end
     loggers = []
     # console logger
-    console = MinLevelLogger(ConsoleLogger(), min_lvl(verbose))
+    console = MinLevelLogger(ConsoleLogger(Logging.Debug), min_lvl(verbose))
     push!(loggers, console)
     # file logger
     file = if !isnothing(logfile) && !isempty(logfile)

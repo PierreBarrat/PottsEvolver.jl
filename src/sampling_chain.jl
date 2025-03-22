@@ -4,9 +4,9 @@
 
 function mcmc_sample_chain(
     g::PottsGraph,
-    M::Integer,
+    time_steps::AbstractVector{<:Integer},
     s0::AbstractSequence,
-    params::SamplingParameters{<:Integer};
+    params::SamplingParameters;
     rng=Random.GLOBAL_RNG,
     progress_meter=true,
     alignment_output=true,
@@ -14,41 +14,41 @@ function mcmc_sample_chain(
 )
     # Argument checks
     @argcheck params.sampling_type == :discrete
-    @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
+    M = length(time_steps)
+    @argcheck M > 0 "Number of samples must be >0. Instead $(M)"
+    @argcheck issorted(time_steps) && all(>=(0), time_steps) """
+    Time steps must be positive and sorted in ascending order. Instead $time_steps
+    """
     tmp_check_alphabet_consistency(g, s0)
     if !alignment_output && translate_output
         error("I have to implement this case")
     end
 
-    @unpack Teq, burnin = params
-
     @info """
     Sampling $M sequences using the following settings:
         - Type of sampling: $(params.sampling_type)
         - Type of sequence = $(typeof(s0))
-        - Steps between samples = $(Teq)
-        - burnin = $(burnin)
         - Step style = $(params.step_type)
         - Step meaning = $(params.step_meaning)
-        - fraction of gap steps (if codon) = $(params.fraction_gap_step)
+        - Fraction of gap steps (if codon) = $(params.fraction_gap_step)
+        - Initial/last time step: $(first(time_steps))/$(last(time_steps))
     """
-
     @info "Initial sequence: $s0"
 
     # vector for return value
     conf = copy(s0)
     S = similar([conf], M) # the sample
-    tvals = Vector{Int}(undef, M) # number of steps at each sample
+    # tvals = Vector{Int}(undef, M) # number of steps at each sample
 
     # Holder if gibbs steps are used
     # the size of the holder depends on the symbols of the sequence: amino acids or codons
     gibbs_holder = get_gibbs_holder(s0)
 
     # Burnin
+    burnin = first(time_steps)
     @info "Initializing with $(burnin) burnin iterations... "
     burnin > 0 && mcmc_steps!(conf, g, burnin, params; rng, gibbs_holder)
     S[1] = copy(conf)
-    tvals[1] = burnin
 
     # Sampling
     log_info = []
@@ -61,22 +61,30 @@ function mcmc_sample_chain(
         dt=2,
     )
     @info "Sampling..."
-    time = @elapsed for m in 2:M
-        # doing Teq steps on the current configuration
-        _, proposed, performed = mcmc_steps!(conf, g, Teq, params; rng, gibbs_holder)
+    t_previous = first(time_steps)
+    time = @elapsed for (m, t_now) in enumerate(Iterators.drop(time_steps, 1))
+        T = t_now - t_previous
+        # doing T steps on the current configuration
+        @debug "Doing $T discrete steps"
+        _, proposed, performed = mcmc_steps!(conf, g, T, params; rng, gibbs_holder)
         # storing the result in S
-        S[m] = copy(conf)
-        tvals[m] = tvals[m - 1] + Teq
+        S[m+1] = copy(conf)
         # misc.
         push!(
             log_info, (proposed=proposed, performed=performed, ratio=performed / proposed)
         )
+        t_previous = t_now
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
     end
     @info "Sampling done in $time seconds"
 
-    sequences = fmt_output(S, alignment_output, translate_output; names=tvals)
-    return (; sequences, tvals, info=log_info, params=return_params(params, s0))
+    sequences = fmt_output(S, alignment_output, translate_output; names=time_steps)
+    return (;
+        sequences,
+        tvals=collect(time_steps),
+        info=log_info,
+        params=return_params(params, s0)
+    )
 end
 
 #=================================#
@@ -85,9 +93,9 @@ end
 
 function mcmc_sample_continuous_chain(
     g::PottsGraph,
-    M::Integer,
+    time_steps::AbstractVector{<:AbstractFloat},
     s0::AbstractSequence,
-    params::SamplingParameters{<:AbstractFloat};
+    params::SamplingParameters;
     rng=Random.GLOBAL_RNG,
     progress_meter=true,
     alignment_output=true,
@@ -95,24 +103,26 @@ function mcmc_sample_continuous_chain(
 )
     # Argument checks
     @argcheck params.sampling_type == :continuous
-    @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
+    M = length(time_steps)
+    @argcheck M > 0 "Number of samples must be >0. Instead $(M)"
+    @argcheck issorted(time_steps) && all(>=(0), time_steps) """
+    Time steps must be positive and sorted in ascending order. Instead $time_steps
+    """
     tmp_check_alphabet_consistency(g, s0)
     if !alignment_output && translate_output
         error("I have to implement this case")
     end
 
-    @unpack Teq, burnin, step_type = params
+    @unpack step_type = params
 
     @info """
-    Sampling $M sequences using the following settings:
+       Sampling $M sequences using the following settings:
         - Type of sampling: $(params.sampling_type)
         - Type of sequence = $(typeof(s0))
-        - Time between samples = $(FloatType(Teq))
-        - burnin = $(burnin)
-        - Type of sampling = continuous
         - Step style = $(params.step_type)
         - Step meaning = $(params.step_meaning)
-        - fraction of gap steps (if codon) = $(params.fraction_gap_step)
+        - Fraction of gap steps (if codon) = $(params.fraction_gap_step)
+        - Initial/last time step: $(first(time_steps))/$(last(time_steps))
     """
 
     @info "Initial sequence: $s0"
@@ -120,8 +130,6 @@ function mcmc_sample_continuous_chain(
     # vector for return value
     conf = copy(s0)
     S = similar([conf], M) # the sample
-    tvals = Vector{FloatType}(undef, M) # number of steps at each sample
-    # substitution_times = Vector{FloatType}(undef, 0) # time of each substitution
 
     R = if !isnothing(params.substitution_rate)
         @info "Using provided average model substitution rate $(params.substitution_rate)"
@@ -141,10 +149,10 @@ function mcmc_sample_continuous_chain(
     state.R = R
 
     # Burnin
-    @info "Initializing with burnin time $(burnin)... "
-    burnin > 0 && mcmc_steps!(state, g, Float64(params.burnin), step_type; rng) # Float to ensure this goes to the continuous version - improve it later
+    burnin = first(time_steps)
+    @info "Initializing with $(burnin) burnin iterations... "
+    burnin > 0 && mcmc_steps!(state, g, burnin, step_type; rng)
     S[1] = copy(state.seq)
-    tvals[1] = burnin
 
     # Sampling
     log_info = []
@@ -157,20 +165,27 @@ function mcmc_sample_continuous_chain(
         dt=2,
     )
     @info "Sampling..."
-    time = @elapsed for m in 2:M
-        # doing Teq steps on the current configuration
-        _, number_substitutions = mcmc_steps!(state, g, Float64(Teq), step_type; rng)
+    t_previous = first(time_steps)
+    time = @elapsed for (m, t_now) in enumerate(Iterators.drop(time_steps, 1))
+        T = t_now - t_previous
+        # doing T steps on the current configuration
+        @debug "Sampling for time $T"
+        _, number_substitutions = mcmc_steps!(state, g, T, step_type; rng)
         # storing the result in S
-        S[m] = copy(state.seq)
-        tvals[m] = tvals[m - 1] + Float64(Teq)
+        S[m+1] = copy(state.seq)
         # misc.
         push!(log_info, (; number_substitutions))
+        t_previous = t_now
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
     end
     @info "Sampling done in $time seconds"
-
-    sequences = fmt_output(S, alignment_output, translate_output; names=tvals)
-    return (; sequences, tvals, info=log_info, params=return_params(params, s0))
+    sequences = fmt_output(S, alignment_output, translate_output; names=time_steps)
+    return (;
+        sequences,
+        tvals=collect(time_steps),
+        info=log_info,
+        params=return_params(params, s0)
+    )
 end
 
 #=====================#
