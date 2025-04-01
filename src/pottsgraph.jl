@@ -226,3 +226,17 @@ function context_dependent_entropy(s::AbstractSequence, g::PottsGraph)
 
     return CDE
 end
+
+"""
+    profile_model(f1::AbstractMatrix; pc = 1e-2)
+
+Return a PottsGraph with only fields that fits the single site frequencies in `f1`.
+`f1` is of size `qxL`, with `q` the number of states (*e.g.* amino acids) and `L` the
+length of the sequence.
+Pseudocount ratio `pc` is used.
+"""
+function profile_model(f1::AbstractMatrix; pc = 1e-2, alphabet=nothing)
+    q, L = size(f1)
+    h = log.(pc * ones(Float64, q, L)/q  + (1-pc)*f1)
+    return PottsGraph(; J = zeros(q, q, L, L), h, alphabet)
+end
