@@ -121,14 +121,15 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
         # compute transition rates and scaled substitution rate
         Q = transition_rates!(state, g, step_type)
         R = sum(Q)
-        if R <= 0
-            @error "Something went wrong in gillespie: null total rate"
+        if R <= 0 || isnan(R)
+            @error "Something went wrong in gillespie: total rate $R"
             @info state
         end
         R_scaled = isnothing(state.R) ? R : R / state.R * L
         @debug "Unscaled substitution rate: $R"
         @debug "Scaled substitution rate per site: $(R_scaled/L)"
         # pick time of next substitution
+
         Δt = rand(rng, Exponential(1 / R_scaled))
         t += Δt
 
@@ -351,7 +352,7 @@ function transition_rates_gibbs!(state::CTMCState, g::PottsGraph)
     @inbounds for i in 1:L
         Zi = 0
         for a in 1:q
-            zi = exp(-(Eref + state.ΔE[a, i]))
+            zi = exp(-(state.ΔE[a, i]))
             Zi += zi
             state.qL_buffer[a, i] = state.accessibility_mask[a, i] ? zi : 0.0
         end
