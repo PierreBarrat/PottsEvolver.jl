@@ -10,6 +10,7 @@
     mcmc_sample(
         g::PottsGraph, M::Integer, params::SamplingParameters; init=:random_num, kwargs...)
     )
+    mcmc_sample(g, tvals::AbstractVector, s0, params::SamplingParameters; kwargs...)
 
 First form: sample `g` for `M` steps starting from `s0`, using parameters in `params`.
 Return value: named tuple with fields
@@ -19,6 +20,9 @@ Return value: named tuple with fields
 - `params`: parameters of the run.
 
 Second form: same, but initial sequence is provided through the `init` kwarg.
+
+Third form: provide a set of times `tvals` at which samples are taken. Can also be used
+with the `init` kwarg.
 
 
 *Note*: this function is not very efficient if `M` is small.
