@@ -57,7 +57,7 @@ function reset!(state::CTMCState)
     state.accessibility_mask .= false
     state.qL_buffer .= 0
     state.ΔE_copy .= 0
-    state.substitutions .= (; i=0, a=0, t=0.)
+    state.substitutions .= Vector{Tuple{Mutation, Float64}}(undef, 0)
     state.t = 0.
     state.i = nothing
     state.x = nothing
