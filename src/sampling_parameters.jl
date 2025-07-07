@@ -117,6 +117,8 @@ can be used directly.
   (the average runs over sequences). 
   It is the result of `average_substitution_rate`. 
   This is computed automatically if not provided (but takes some time).
+- `track_substitutions`: track all substitutions (position, state, time) occuring during
+  the Gillespie simulation. They are returned in the `info` output of `mcmc_sample`.
 
 """
 @kwdef mutable struct SamplingParameters{T<:Real}
@@ -132,6 +134,7 @@ can be used directly.
     branchlength_meaning::BranchLengthMeaning = BranchLengthMeaning(:step, :exact)
     # for continuous sampling only - average substitution rate for a given Potts model
     substitution_rate::Union{Nothing,Float64} = nothing
+    track_substitutions::Bool = false
     function SamplingParameters(
         sampling_type,
         step_type,
@@ -141,6 +144,7 @@ can be used directly.
         fraction_gap_step,
         branchlength_meaning,
         substitution_rate::Union{Nothing,Real},
+        track_substitutions::Bool,
     ) where {T}
         step_meaning = try
             Symbol(step_meaning)
@@ -190,6 +194,7 @@ can be used directly.
             fraction_gap_step,
             branchlength_meaning,
             substitution_rate,
+            track_substitutions,
         )
     end
 end
@@ -214,5 +219,6 @@ function Base.show(io::IO, params::SamplingParameters)
         else
             println(io, "  substitution_rate = not set")
         end
+        println(io, "  track_substitutions = $(params.track_substitutions)")
     end
 end

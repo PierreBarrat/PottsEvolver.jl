@@ -1,3 +1,9 @@
+struct Mutation
+    # mutation from old to new
+    pos::Int
+    old::Int
+    new::Int
+end
 @kwdef mutable struct CTMCState{S<:AbstractSequence}
     seq::S # current working sequence
     previous_seq::Union{Nothing,S} # used for efficient calculation of ΔE
@@ -5,6 +11,8 @@
     accessibility_mask::Matrix{Bool} = similar(ΔE, Bool)
     qL_buffer::Matrix{FloatType} = similar(ΔE) # useful for i.e. transition rates
     ΔE_copy::Matrix{FloatType} = copy(ΔE)
+    substitutions::Vector{Tuple{Mutation, Float64}}
+    t::Float64 # internal time
     i::Union{Nothing,Integer} # position of the next mutation
     x::Union{Nothing,Integer} # state of the next mutation
     R::Union{Nothing,FloatType} = nothing # average transition rate, used for scaling
@@ -17,6 +25,8 @@
             Matrix{Bool}(undef, q, L), # accessibility mask
             Matrix{FloatType}(undef, q, L), # qxL buffer
             Matrix{FloatType}(undef, q, L), # ΔE copy
+            Vector{Tuple{Mutation, Float64}}(undef, 0), # substitutions
+            0., # internal time
             nothing,
             nothing,
             nothing,
@@ -41,12 +51,14 @@ function CTMCState(sequence::NumSequence{T,q}) where {T,q}
 end
 
 function reset!(state::CTMCState)
-    state.seq = state.seq
+    # state.seq = state.seq
     state.previous_seq = nothing
     state.ΔE .= 0
     state.accessibility_mask .= false
     state.qL_buffer .= 0
     state.ΔE_copy .= 0
+    state.substitutions .= (; i=0, a=0, t=0.)
+    state.t = 0.
     state.i = nothing
     state.x = nothing
     state.R = nothing
@@ -90,7 +102,9 @@ function mcmc_steps!(
     Instead :$(parameters.sampling_type).
     """
     state = CTMCState(sequence)
-    return mcmc_steps!(state, g, Tmax, parameters.step_type; kwargs...)
+    return mcmc_steps!(
+        state, g, Tmax, parameters.step_type; parameters.track_substitutions, kwargs...
+    )
 end
 function mcmc_steps!(
     state::CTMCState, g::PottsGraph, Tmax::AbstractFloat, step_type::Symbol; kwargs...
@@ -99,14 +113,16 @@ function mcmc_steps!(
     Size of sequence and model do not match: $(length(state.seq)) and $(size(g).L)
     """
     n_substitutions = gillespie!(state, g, Tmax, step_type; kwargs...)
-    return state.seq, n_substitutions # all substitutions are accepted
+    return state.seq, n_substitutions, state.substitutions
 end
 
 #=================================#
 ############ Gillespie ############
 #=================================#
 
-function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
+function gillespie!(
+    state, g, Tmax, step_type; rng=Random.GLOBAL_RNG, track_substitutions=false
+)
     Tmax == 0 && return Float64[]
 
     q, L = size(state)
@@ -126,18 +142,19 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
             @info state
         end
         R_scaled = isnothing(state.R) ? R : R / state.R * L
-        @debug "Unscaled substitution rate: $R"
-        @debug "Scaled substitution rate per site: $(R_scaled/L)"
+        # @debug "Unscaled substitution rate: $R"
+        # @debug "Scaled substitution rate per site: $(R_scaled/L)"
         # pick time of next substitution
 
         Δt = rand(rng, Exponential(1 / R_scaled))
+        state.t += Δt # tracking total time in state
         t += Δt
 
         # If time is too large, we stop
         # This does not really influence the distribution of time to the next substitution
         # as an exponential process is memory-less
         if t > Tmax
-            state.ΔE .= state.ΔE_copy # reset `state` to its old state since no move is made
+            state.ΔE .= state.ΔE_copy # reset energy to its previous value
             # state.seq and other important fields have not been modified yet
             # state.qL_buffer and state.accessibility_mask were changed, but this is ok
             break
@@ -163,6 +180,10 @@ function gillespie!(state, g, Tmax, step_type; rng=Random.GLOBAL_RNG)
         # do the substitution
         gillespie_substitute!(state, i, a, g)
         n_substitutions += 1
+        # memorize it if asked
+        if track_substitutions
+            push!(state.substitutions, (Mutation(i, state.previous_seq[i], a), state.t))
+        end
     end
 
     # return times
@@ -226,7 +247,7 @@ function average_transition_rate(
     rng=Random.GLOBAL_RNG,
     progress_meter=true,
     params=nothing,
-    n_samples=100,
+    n_samples=250,
 )
     (; L) = size(g)
 
@@ -264,8 +285,7 @@ end
     transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
 
 Compute the transition rate matrix for the sequence `sequence`.
-Return the a `q` by `L` matrix `Q` and the total rate `R`.
-Allocates a `CTMCState`. 
+Return the a `q` by `L` matrix `Q`. Allocates a `CTMCState`.
 """
 function transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
     state = CTMCState(copy(sequence))
@@ -599,4 +619,11 @@ function _delta_energy(seq::AbstractSequence, refseq::AbstractSequence, i, g)
         end
     end
     return dE
+end
+
+#==================#
+####### Misc #######
+#==================#
+function Base.show(io::IO, ::MIME"text/plain", mutation::Mutation)
+    print(io, "(Mutation) $(mutation.pos): $(mutation.old) --> $(mutation.new)")
 end

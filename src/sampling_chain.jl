@@ -170,11 +170,24 @@ function mcmc_sample_continuous_chain(
         T = t_now - t_previous
         # doing T steps on the current configuration
         @debug "Sampling for time $T"
-        _, number_substitutions = mcmc_steps!(state, g, T, step_type; rng)
+        _, number_substitutions, substitutions = mcmc_steps!(
+            state, g, T, step_type; rng, params.track_substitutions,
+        )
         # storing the result in S
         S[m+1] = copy(state.seq)
         # misc.
-        push!(log_info, (; number_substitutions))
+        substitutions = if params.track_substitutions
+            # add the substitutions of the last T steps
+            substitutions[(end-number_substitutions+1):end]
+        else
+            # not tracking substitutions
+            Tuple{Mutation, Float64}[]
+        end
+        new_info = (;
+            number_substitutions,
+            substitutions,
+        )
+        push!(log_info, new_info)
         t_previous = t_now
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
     end
