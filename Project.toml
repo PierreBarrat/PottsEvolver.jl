@@ -4,7 +4,6 @@ authors = ["Pierre Barrat-Charlaix"]
 version = "1.0.0-DEV"
 
 [deps]
-Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
 BioSequenceMappings = "a84bc454-70cc-4f51-8a9d-ca76a5a82222"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -14,21 +13,27 @@ PoissonRandom = "e409e4f3-bfea-5376-8464-e040bb5c01ab"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ReadOnlyArrays = "988b38a3-91fc-5605-94a2-ee2116b3bd83"
-StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TreeTools = "62f0eae3-8c0e-4032-a621-7756092209e5"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
+Accessors = "0.1"
+Aqua = "0.8"
 ArgCheck = "2.3.0"
+BioSequenceMappings = "0.1.6"
 Distributions = "0.25.117"
 Logging = "1.10.0"
 LoggingExtras = "1.1.0"
 PoissonRandom = "0.4.4"
+ProgressMeter = "1.10"
+Random = "1.11"
 ReadOnlyArrays = "0.2.0"
+StatsBase = "0.34"
+Test = "1.11"
 TreeTools = "0.7.2"
+UnPack = "1.0"
 julia = "1.11"
-Aqua = "0.8"
 
 [extras]
 Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
@@ -37,4 +42,4 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "Aqua"]
+test = ["Test", "Aqua", "Accessors"]
