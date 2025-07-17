@@ -200,6 +200,13 @@ function Base.show(io::IO, x::MIME"text/plain", g::PottsGraph{T}) where {T}
     return print(io, "PottsGraph{$T}: dimensions (L=$L, q=$q) -- β=$(g.β) -- $(g.alphabet)")
 end
 
+"""
+    context_dependent_entropy(s::AbstractSequence, g::PottsGraph)
+
+The CDE at site `i` is the entropy of the distribution defined by the local field at `i`
+given the context `s[1, ..., i-1, i+1, ..., L]`.
+Return the sum of CDE over `i`.
+"""
 function context_dependent_entropy(s::AbstractSequence, g::PottsGraph)
     (; q, L) = size(g)
     f = zeros(Float64, q)
