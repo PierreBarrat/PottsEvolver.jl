@@ -7,6 +7,7 @@ using Logging
 using StatsBase
 using TreeTools
 
+
 @testset "PottsEvolver.jl" begin
     @testset "Codons" begin
         include("codons/test.jl")
@@ -27,4 +28,8 @@ using TreeTools
     @testset "Sampling on tree" begin
         include("sampling_tree/test.jl")
     end
+end
+
+@testset "Aqua.jl" begin
+    include("Aqua.jl")
 end
