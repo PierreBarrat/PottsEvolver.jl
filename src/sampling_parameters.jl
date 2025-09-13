@@ -78,6 +78,7 @@ step_meaning::Symbol = :accepted # relevant for :discrete
 fraction_gap_step::Float64 = 0.9 # relevant for :discrete and codon sampling
 branchlength_meaning::BranchLengthMeaning # relevant for :discrete and sampling on a tree
 substitution_rate::Union{Nothing,Float64} = nothing # relevant for :continuous
+track_substitutions::Bool = false # relevant for continuous
 ```
 
 `sampling_type` can be `:discrete` or `:continuous`.
