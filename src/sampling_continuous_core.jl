@@ -233,6 +233,7 @@ end
     average_transition_rate(g::PottsGraph, step_type, S::Vector{AbstractSequence})
 
 Compute the average transition rate for the continuous time Markov chain based on `g`. 
+    A sample from `g` is generated using a discrete time Markov chain for this purpose.
 
 In the first form, a sample from `g` is used for averaging.
 `s0` is only used to initialize the `CTMCState` and provide a type (codon or aa),
@@ -248,11 +249,11 @@ function average_transition_rate(
     progress_meter=true,
     params=nothing,
     n_samples=250,
+    Teq=10*size(g).L
 )
-    (; L) = size(g)
-
-    # params default to Teq=10*L and default of SamplingParameters for the rest
-    params = isnothing(params) ? SamplingParameters(; Teq=L * 10) : params
+    if isnothing(params)
+        params = SamplingParameters(; sampling_type=:discrete, Teq)
+    end
 
     sample_eq = mcmc_sample(
         g,
