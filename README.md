@@ -1,7 +1,7 @@
 # PottsEvolver
 
 [![Build Status](https://github.com/PierreBarrat/PottsEvolver.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/PierreBarrat/PottsEvolver.jl/actions/workflows/CI.yml?query=branch%3Amaster)
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://PierreBarrat.github.io/PottsEvolver.jl/stable/)
+<!-- [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://PierreBarrat.github.io/PottsEvolver.jl/stable/) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://PierreBarrat.github.io/PottsEvolver.jl/dev/)
 
 Simulate protein evolution using a Potts model and MCMC sampling. 
