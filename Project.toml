@@ -1,7 +1,7 @@
 name = "PottsEvolver"
 uuid = "288ebb56-9d8a-405a-a2d6-6ed6f22c6052"
 authors = ["Pierre Barrat-Charlaix"]
-version = "0.0.1"
+version = "0.1.0"
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
