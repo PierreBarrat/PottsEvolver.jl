@@ -15,15 +15,15 @@ BranchLengthMeaning
     length::Symbol
 ```
 
-Define how the branch lengths should be interpreted when sampling on a tree.
+Define how the branch lengths should be interpreted when sampling on a tree with a discrete-time algorithm.
 This is done in two consecutive steps.
-1. Convert the branch lengths to mcmc steps.
-    If `type==:sweep`, multiply the branch length by the length of the sequence.
-    Else, if `type==:step`, leave it as is.
+1. Decide whether the branch length represents mcmc steps or sweeps.
+    - If `type==:sweep`, multiply the branch length by the length of the sequence.
+    - Else, if `type==:step`, leave it as is.
 2. Convert the branch length to an integer value which will be the number of mcmc steps.
-  - if `length==:exact`, the branch length is expected to be an integer (`rtol=1e-6`).
-  - if `length==:round`, round it to the closest `Int`.
-  - if `length==:poisson`, sample a poisson distribution with the branch length as mean.
+    - if `length==:exact`, the branch length is expected to be an integer (`rtol=1e-6`).
+    - if `length==:round`, round it to the closest `Int`.
+    - if `length==:poisson`, sample a poisson distribution with the branch length as mean.
 """
 @kwdef struct BranchLengthMeaning
     type::Symbol

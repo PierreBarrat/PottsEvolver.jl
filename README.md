@@ -1,6 +1,8 @@
 # PottsEvolver
 
 [![Build Status](https://github.com/PierreBarrat/PottsEvolver.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/PierreBarrat/PottsEvolver.jl/actions/workflows/CI.yml?query=branch%3Amaster)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://PierreBarrat.github.io/BioSequenceMappings.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://PierreBarrat.github.io/BioSequenceMappings.jl/dev/)
 
 Simulate protein evolution using a Potts model and MCMC sampling. 
 Can simulate either a single lineage sampled at given times, or along branches of a tree. 

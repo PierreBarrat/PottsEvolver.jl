@@ -12,7 +12,13 @@ makedocs(;
         edit_link="master",
         assets=String[],
     ),
-    pages=["Quickstart" => "index.md", "Reference" => "reference.md"],
+    pages=[
+        "Index" => "index.md",
+        "Potts model" => "pottsgraph.md",
+        "Sampling" => "sampling.md",
+        "Genetic code" => "genetic_code.md",
+        "Reference" => "reference.md",
+    ],
     checkdocs=:exports,
 )
 
