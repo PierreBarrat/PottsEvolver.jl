@@ -11,7 +11,7 @@ end
     accessibility_mask::Matrix{Bool} = similar(ΔE, Bool)
     qL_buffer::Matrix{FloatType} = similar(ΔE) # useful for i.e. transition rates
     ΔE_copy::Matrix{FloatType} = copy(ΔE)
-    substitutions::Vector{Tuple{Mutation, Float64}}
+    substitutions::Vector{Tuple{Mutation,Float64}}
     t::Float64 # internal time
     i::Union{Nothing,Integer} # position of the next mutation
     x::Union{Nothing,Integer} # state of the next mutation
@@ -25,8 +25,8 @@ end
             Matrix{Bool}(undef, q, L), # accessibility mask
             Matrix{FloatType}(undef, q, L), # qxL buffer
             Matrix{FloatType}(undef, q, L), # ΔE copy
-            Vector{Tuple{Mutation, Float64}}(undef, 0), # substitutions
-            0., # internal time
+            Vector{Tuple{Mutation,Float64}}(undef, 0), # substitutions
+            0.0, # internal time
             nothing,
             nothing,
             nothing,
@@ -57,8 +57,8 @@ function reset!(state::CTMCState)
     state.accessibility_mask .= false
     state.qL_buffer .= 0
     state.ΔE_copy .= 0
-    state.substitutions .= Vector{Tuple{Mutation, Float64}}(undef, 0)
-    state.t = 0.
+    state.substitutions .= Vector{Tuple{Mutation,Float64}}(undef, 0)
+    state.t = 0.0
     state.i = nothing
     state.x = nothing
     state.R = nothing
@@ -74,7 +74,7 @@ Base.size(state::CTMCState) = size(state.ΔE)
 
 """
     mcmc_steps!(
-        sequence::AbstractSequence, g, Tmax::AbstractFloat, parameters::SamplingParameters; 
+        sequence::AbstractSequence, g, Tmax::AbstractFloat, parameters::SamplingParameters;
         kwargs...
     )
     mcmc_steps!(
@@ -87,8 +87,8 @@ Modifies the input sequence `s` and returns it.
 Allocates a `CTMCState` (three matrices of order `q*L`).
 
 ## Notes
-- The form with `state::CTMCState` will use a pre-allocated `CTMCState` for calculations. 
-- Expects `parameters.sampling_type` to be `:continuous`. Fails if otherwise. 
+- The form with `state::CTMCState` will use a pre-allocated `CTMCState` for calculations.
+- Expects `parameters.sampling_type` to be `:continuous`. Fails if otherwise.
 """
 function mcmc_steps!(
     sequence::AbstractSequence,
@@ -98,7 +98,7 @@ function mcmc_steps!(
     kwargs...,
 )
     @argcheck parameters.sampling_type == :continuous """
-    `Tmax` is `AbstractFloat`: expected sampling type to be :continuous. 
+    `Tmax` is `AbstractFloat`: expected sampling type to be :continuous.
     Instead :$(parameters.sampling_type).
     """
     state = CTMCState(sequence)
@@ -230,16 +230,19 @@ end
 
 """
     average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence; kwargs...)
-    average_transition_rate(g::PottsGraph, step_type, S::Vector{AbstractSequence})
+    average_transition_rate(g::PottsGraph, step_type, S::Vector{<:AbstractSequence})
+    average_transition_rate(
+        g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence, kwargs...
+    )
 
-Compute the average transition rate for the continuous time Markov chain based on `g`. 
+Compute the average transition rate for the continuous time Markov chain based on `g`.
     A sample from `g` is generated using a discrete time Markov chain for this purpose.
 
 In the first form, a sample from `g` is used for averaging.
 `s0` is only used to initialize the `CTMCState` and provide a type (codon or aa),
 and the keyword arguments are used to parametrize the sampling process.
 
-In the second form, the sample is provided as argument.
+In the second form, the sample is provided as argument, either as a vector of sequences or as a fasta file.
 """
 function average_transition_rate(
     g::PottsGraph,
@@ -249,21 +252,16 @@ function average_transition_rate(
     progress_meter=true,
     params=nothing,
     n_samples=250,
-    Teq=10*size(g).L
+    Teq=10 * size(g).L,
 )
     if isnothing(params)
         params = SamplingParameters(; sampling_type=:discrete, Teq)
     end
 
     sample_eq = mcmc_sample(
-        g,
-        n_samples,
-        params;
-        alignment_output=false,
-        init=s0,
-        rng=rng,
-        progress_meter=progress_meter,
-    ).sequences
+        g, n_samples, params; alignment_output=false, init=s0, rng=rng, progress_meter
+    )
+    sample_eq = sample_eq.sequences
     return average_transition_rate(g, step_type, sample_eq)
 end
 function average_transition_rate(
@@ -276,6 +274,13 @@ function average_transition_rate(
     end
 
     return Rmean
+end
+function average_transition_rate(
+    g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence, kwargs...
+)
+    aln = read_fasta(fastafile)
+    sample = map(seq_type, aln)
+    return average_transition_rate(g, step_type, sample; kwargs...)
 end
 
 #========================================================================#
@@ -297,7 +302,7 @@ end
     transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scratch=false)
 
 Compute the transition rate matrix for the sequence `state.seq`.
-Return the a `q` by `L` matrix `Q` and the total rate `R`. 
+Return the a `q` by `L` matrix `Q` and the total rate `R`.
 """
 function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scratch=false)
     # Compute energy differences
@@ -564,8 +569,8 @@ end
         ΔE::Matrix{FloatType}, refseq::AbstractSequence, g::PottsGraph;
     )
 
-Compute the energy differences between `refseq` and neighbouring sequences, storing result 
-in pre-allocated matrix ΔE. 
+Compute the energy differences between `refseq` and neighbouring sequences, storing result
+in pre-allocated matrix ΔE.
 """
 function compute_energy_differences!(
     ΔE::Matrix{FloatType}, refseq::AbstractSequence, g::PottsGraph;
@@ -626,5 +631,5 @@ end
 ####### Misc #######
 #==================#
 function Base.show(io::IO, ::MIME"text/plain", mutation::Mutation)
-    print(io, "(Mutation) $(mutation.pos): $(mutation.old) --> $(mutation.new)")
+    return print(io, "(Mutation) $(mutation.pos): $(mutation.old) --> $(mutation.new)")
 end

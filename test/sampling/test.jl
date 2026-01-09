@@ -218,3 +218,18 @@ end
         @test S[1] != s0.seq
     end
 end
+
+@testset "Reproducibility" begin
+    L, q = 10, 5
+    g = PottsGraph(L, q; init=:null)
+    s0 = NumSequence(L, q)
+    params = SamplingParameters(; sampling_type=:discrete, Teq=10)
+
+    rng = Random.seed!(Xoshiro(123), 42)
+    aln_1 = mcmc_sample(g, 2, params; init=s0, rng).sequences
+
+    rng = Random.seed!(Xoshiro(123), 42)
+    aln_1 = mcmc_sample(g, 2, params; init=s0, rng).sequences
+
+    @test_broken aln_1[1] == aln_2[1] && aln_1[2] == aln_2[2]
+end

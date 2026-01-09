@@ -4,9 +4,9 @@ using PottsEvolver
 using Accessors
 using BioSequenceMappings
 using Logging
+using Random
 using StatsBase
 using TreeTools
-
 
 @testset "PottsEvolver.jl" begin
     @testset "Codons" begin

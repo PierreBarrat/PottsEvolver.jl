@@ -98,7 +98,7 @@ end
         # Testing all three ways to compute transition rates
         # - working on a pre-allocated CTMCState
         # - from scratch, but still using the buffer from the CTMCState
-        # - from an uninitialized CTMCState 
+        # - from an uninitialized CTMCState
         refseq = CodonSequence([1, 2, 3])
         state = PottsEvolver.CTMCState(refseq)
 
