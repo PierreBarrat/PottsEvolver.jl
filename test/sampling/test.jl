@@ -31,7 +31,7 @@ end
     params = SamplingParameters(; step_meaning=:changed, Teq=1, burnin=3)
     S, tvals, _ = mcmc_sample(g, M, params)
     @test unique(map(i -> hamming(S[i - 1], S[i]; normalize=false), 2:M)) == [1]
-    @test tvals == collect(3 .+ (0:((M-1))))
+    @test tvals == collect(3 .+ (0:((M - 1))))
 
     # difference from init should be 1, then no changes
     params = SamplingParameters(; step_meaning=:changed, Teq=0, burnin=1)
@@ -49,7 +49,7 @@ end
     H = map(i -> hamming(S[i - 1], S[i]; normalize=false), 2:M)
     acc_ratio_1 = sum(H) / length(H)
     @test acc_ratio_1 < 1
-    @test tvals == collect(0 .+ (0:(M-1)))
+    @test tvals == collect(0 .+ (0:(M - 1)))
 
     # The difference between two samples should be 0
     params = SamplingParameters() # Teq=0, burnin=0
@@ -143,8 +143,8 @@ end
     g = PottsGraph(L, q)
 
     @testset "Errors" begin
-        params_discrete = SamplingParameters(;sampling_type=:discrete)
-        params_continuous = SamplingParameters(;sampling_type=:continuous)
+        params_discrete = SamplingParameters(; sampling_type=:discrete)
+        params_continuous = SamplingParameters(; sampling_type=:continuous)
 
         tvals = [0, 2, 1]
         @test_throws ArgumentError mcmc_sample(g, tvals, params_discrete)
@@ -156,7 +156,7 @@ end
         @test_throws MethodError mcmc_sample(g, tvals, params_continuous)
         @test_throws ArgumentError mcmc_sample(g, Float64.(tvals), params_continuous)
 
-        tvals = [0., 1., 2.]
+        tvals = [0.0, 1.0, 2.0]
         @test_throws MethodError mcmc_sample(g, tvals, params_discrete)
     end
 
@@ -204,12 +204,12 @@ end
         sampling_type = :continuous
         params = SamplingParameters(; sampling_type, step_meaning=:changed, Teq=4, burnin=0)
 
-        time_steps = range(0, 3, length=5)
+        time_steps = range(0, 3; length=5)
         S, tvals, _ = mcmc_sample(g, time_steps, params)
         @test length(S) == length(time_steps)
         @test tvals == time_steps
 
-        time_steps = 3. .+ zeros(Float64, 5)
+        time_steps = 3.0 .+ zeros(Float64, 5)
         s0 = NumSequence(L, q)
         S, tvals, _ = mcmc_sample(g, time_steps, s0, params)
         @test length(S) == length(time_steps)

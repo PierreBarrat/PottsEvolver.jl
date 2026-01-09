@@ -176,3 +176,33 @@ end
         @test seq_left == data_pernode.sequences[nlabel][m]
     end
 end
+
+@testset "main sample function" begin
+    L, q = 10, 21
+    g = PottsGraph(L, q; init=:rand)
+    params = SamplingParameters(; sampling_type=:discrete)
+    init = AASequence(L)
+
+    # test dispatch of mcmc_sample
+    @testset "Proper dispatch" begin
+        # from a TreeTools.Tree object
+        tree = balanced_binary_tree(8, 1.0)
+        result = mcmc_sample(g, tree, params; init)
+        @test propertynames(result) ==
+            (:tree, :leaf_sequences, :internal_sequences, :params)
+
+        # from a Newick file (String)
+        basedir = dirname(@__FILE__)
+        print(joinpath(basedir, "test_tree.nwk"))
+        @test isfile(joinpath(basedir, "test_tree.nwk"))
+        @test propertynames(result) ==
+            (:tree, :leaf_sequences, :internal_sequences, :params)
+    end
+
+    # test failure with ill-defined tree
+    @testset "Ill-defined tree" begin
+        tree = TreeTools.Generate.balanced_binary_tree(8) # missing branch lengths
+        params = SamplingParameters()
+        @test_throws ArgumentError PottsEvolver.mcmc_sample(g, tree, params)
+    end
+end

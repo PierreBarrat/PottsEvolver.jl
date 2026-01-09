@@ -64,6 +64,10 @@ function steps_from_branchlength(τ::Real, p::BranchLengthMeaning, L::Int)
         throw(ArgumentError("Invalid `length` field $(p.length)"))
     end
 end
+function steps_from_branchlength(::Missing, ::BranchLengthMeaning, L)
+    return throw(ArgumentError("""Got `missing` branch length.
+           The input tree probably probably has a branch with unspecified length."""))
+end
 
 """
     mutable struct SamplingParameters
@@ -72,8 +76,8 @@ Construct using keyword arguments:
 ```
 sampling_type::Symbol = :discrete
 step_type::Symbol = :gibbs
-Teq::Real = 0
-burnin::Real = 5*Teq
+Teq::Real = 0 # time between samples, for chain
+burnin::Real = 5*Teq # time before first sample
 step_meaning::Symbol = :accepted # relevant for :discrete
 fraction_gap_step::Float64 = 0.9 # relevant for :discrete and codon sampling
 branchlength_meaning::BranchLengthMeaning # relevant for :discrete and sampling on a tree
@@ -82,16 +86,16 @@ track_substitutions::Bool = false # relevant for continuous
 ```
 
 `sampling_type` can be `:discrete` or `:continuous`.
-The time between samples is `Teq`, and an extra time `burnin` is taken before the first sample. 
-Allowed values of `step_type` differ between the continuous and discrete cases. 
+The time between samples is `Teq`, and an extra time `burnin` is taken before the first sample.
+Allowed values of `step_type` differ between the continuous and discrete cases.
 
 ## Discrete sampling
 - `Teq` is measured in swaps: accepted (or attempted) changes of one sequence position.
   It must be an integer.
-- `burnin`: number of steps starting from the initial sequence before the first sample. 
-  Must be an integer. 
+- `burnin`: number of steps starting from the initial sequence before the first sample.
+  Must be an integer.
 - `step_type`: `:gibbs` only. I intend to implement `:metropolis` and maybe `:glauber`.
-- `step_meaning` (:discrete only): whether a swap count towards equilibration or not. 
+- `step_meaning` (:discrete only): whether a swap count towards equilibration or not.
   It can take three values
     - `:proposed`: all mcmc steps count towards equilibration
     - `:accepted`: only accepted steps count (all steps for non-codon Gibbs)
@@ -99,24 +103,24 @@ Allowed values of `step_type` differ between the continuous and discrete cases.
     *Note*: Gibbs steps for codons are more complicated, since they involve the possibility
     Metropolis step for gaps, which can be rejected.
 
-- `fraction_gap_step`: fraction of `:metropolis` steps concerning gaps when sampling with 
+- `fraction_gap_step`: fraction of `:metropolis` steps concerning gaps when sampling with
   codons. This is only relevant for discrete sampling with codons.
-- `branchlength_meaning`: how branch-lengths on a tree must be converted to swaps. 
+- `branchlength_meaning`: how branch-lengths on a tree must be converted to swaps.
     See `?BranchLengthMeaning` for information.
     This is only useful if you sample along branches of a tree.
 
 
 ## Continuous sampling
 
-For continuous sampling, there is no notion of swap/sweep or of accepted/rejected steps. 
-Since any positive real number is acceptable as a sampling time, branch lenghts of trees 
-can be used directly. 
+For continuous sampling, there is no notion of swap/sweep or of accepted/rejected steps.
+Since any positive real number is acceptable as a sampling time, branch lenghts of trees
+can be used directly.
 
-- `Teq` and `burnin` are floats. 
+- `Teq` and `burnin` are floats.
 - `step_type` can be `:metropolis`, `:glauber` or `:sqrt`.
-- `substitution_rate` is the average substitution rate for a given Potts model  
-  (the average runs over sequences). 
-  It is the result of `average_substitution_rate`. 
+- `substitution_rate` is the average substitution rate for a given Potts model
+  (the average runs over sequences).
+  It is the result of `average_substitution_rate`.
   This is computed automatically if not provided (but takes some time).
 - `track_substitutions`: track all substitutions (position, state, time) occuring during
   the Gillespie simulation. They are returned in the `info` output of `mcmc_sample`.
@@ -165,7 +169,7 @@ can be used directly.
                 burnin = Int(burnin)
             catch err
                 msg = """
-                For :discrete mcmc, `Teq` and `burnin` should be integers. 
+                For :discrete mcmc, `Teq` and `burnin` should be integers.
                 Instead $Teq and $burnin.
                 """
                 throw(ArgumentError(msg))

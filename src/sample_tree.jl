@@ -16,7 +16,7 @@ Sample `g` along `tree`, using branch lengths to set the number of steps.
 Return a sampled copy `tree`.
 - If `rootseq` is supplied, use it as the root of the tree.
 - If not, then the `init` kwarg will be used, see `PottsEvolver.get_init_sequence` to
-  pick a root sequence. 
+  pick a root sequence.
   The field `params.burnin` is used to perform initial equilibration of the
   root sequence (useful if *e.g.* `init=:random_codon`).
   The code then falls back on the first form.
@@ -129,7 +129,7 @@ Sample `g` along `tree`, using branch lengths to set the number of steps.
 Return a sampled copy `tree`.
 - If `rootseq` is supplied, use it as the root of the tree.
 - If not, then the `init` kwarg will be used, see `PottsEvolver.get_init_sequence` to
-  pick a root sequence. 
+  pick a root sequence.
   The field `params.burnin` is used to perform initial equilibration of the
   root sequence (useful if *e.g.* `init=:random_codon`).
   The code then falls back on the first form.
@@ -231,6 +231,11 @@ end
 ######## Utils ########
 #=====================#
 
+"""
+    prepare_tree(tree::Tree, rootseq::S) where {S<:AbstractSequence}
+
+Convert `tree` to an appropriate type for sampling, by attaching the proper datastructure to each node, to contain the sampled sequence.
+"""
 function prepare_tree(tree::Tree, rootseq::S) where {S<:AbstractSequence}
     # convert to right type -- this makes a copy
     tree_copy = convert(Tree{Sequence{S}}, tree)

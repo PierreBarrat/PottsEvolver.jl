@@ -37,9 +37,9 @@ function mcmc_sample(g::PottsGraph, M::Integer, s0::AbstractSequence, params; kw
     @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
 
     @unpack Teq, burnin = params
-    @argcheck Teq >= 0 && burnin >=0
+    @argcheck Teq >= 0 && burnin >= 0
     tvals = if Teq > 0
-        burnin .+ range(0, (M-1)*Teq, step=Teq)
+        burnin .+ range(0, (M - 1) * Teq; step=Teq)
     else
         burnin .+ zeros(Int, M)
     end
@@ -50,8 +50,12 @@ function mcmc_sample(g::PottsGraph, M::Integer, s0::AbstractSequence, params; kw
     return mcmc_sample(g, tvals, s0, params; kwargs...)
 end
 function mcmc_sample(
-    g::PottsGraph, M::Integer, params::SamplingParameters;
-    init=:random_num, verbose=0, kwargs...
+    g::PottsGraph,
+    M::Integer,
+    params::SamplingParameters;
+    init=:random_num,
+    verbose=0,
+    kwargs...,
 )
     s0 = get_init_sequence(init, g; verbose)
     return mcmc_sample(g, M, s0, params; verbose, kwargs...)
@@ -147,7 +151,7 @@ function mcmc_sample(
         # Constructing output
         leaf_sequences = map(n -> data(sampled_tree[n]).seq, leaf_names)
         internal_sequences = map(n -> data(sampled_tree[n]).seq, internal_names)
-
+        params = return_params(params, root(sampled_tree).data.seq)
         return (;
             tree=sampled_tree,
             leaf_sequences=fmt_output(
@@ -164,8 +168,13 @@ function mcmc_sample(
                 names=internal_names,
                 dict=true,
             ),
+            params,
         )
     end
+end
+function mcmc_sample(g, tree::AbstractString, params; kwargs...)
+    # read tree from a file
+    return mcmc_sample(g, read_tree(tree), params; kwargs...)
 end
 function mcmc_sample(g, tree::Tree, M::Int, params; kwargs...)
     # M sequences per node --> [(tree, leaf, internals)] of length `M`
@@ -278,7 +287,7 @@ function tmp_check_alphabet_consistency(g::PottsGraph, s0::AASequence)
 end
 tmp_check_alphabet_consistency(g::PottsGraph, s0::AbstractSequence) = true
 
-function return_params(p::SamplingParameters, s::T) where {T<:AbstractSequence}
+function return_params(p::SamplingParameters, ::T) where {T<:AbstractSequence}
     d = Dict()
     for field in propertynames(p)
         d[field] = getproperty(p, field)

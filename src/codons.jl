@@ -304,13 +304,13 @@ Value returned is a `Tuple` whose first/second elements represent codons/amino-a
 
 # Examples
 ```jldoctest
-julia> seq = CodonSequence([1,2,3]); # codons 1, 2, and 3
+julia> seq = CodonSequence([1,2,3]; source=:codon); # three first codons: gap, AAA, CAA
 
 julia> PottsEvolver.accessible_codons(seq[1], 1) # mutating the gap codon is undefined
 (nothing, nothing)
 
-julia> PottsEvolver.accessible_codons(seq[2], 1) # mutating codon 2 at base 1 gives access to 2 others
-(UInt8[0x02, 0x03, 0x04], UInt8[0x0a, 0x0f, 0x05])
+julia> PottsEvolver.accessible_codons(seq[2], 1) # mutating codon 2 at base 1 gives access to 2 others (AAA, CAA, GAA); TAA is stop.
+([2, 3, 4], [10, 15, 5])
 ```
 """
 function accessible_codons(codon::Integer, b::Integer)
