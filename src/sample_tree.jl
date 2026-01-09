@@ -9,8 +9,12 @@ Base.copy(S::Sequence) = Sequence(copy(S.seq))
 ########### CONTINUOUS ###########
 #================================#
 """
-    mcmc_sample_continuous_tree(g::PottsGraph, tree::Tree, rootseq::AbstractSequence, params; kwargs...)
-    mcmc_sample_continuous_tree(g::PottsGraph, tree::Tree, params::SamplingParameters; init, kwargs...)
+    mcmc_sample_continuous_tree(
+        g::PottsGraph, tree::Tree, rootseq::AbstractSequence, params; kwargs...
+    )
+    mcmc_sample_continuous_tree(
+        g::PottsGraph, tree::Tree, params::SamplingParameters; init, kwargs...
+    )
 
 Sample `g` along `tree`, using branch lengths to set the number of steps.
 Return a sampled copy `tree`.

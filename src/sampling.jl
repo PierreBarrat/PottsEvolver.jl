@@ -181,7 +181,12 @@ function mcmc_sample(g, tree::Tree, M::Int, params; kwargs...)
     return [mcmc_sample(g, tree, params; kwargs...) for _ in 1:M]
 end
 function mcmc_sample(g::PottsGraph, tree::Tree, s0::AbstractSequence, params; kwargs...)
+    # init sequence as positional arg
     return mcmc_sample(g, tree, params; init=s0, kwargs...)
+end
+function mcmc_sample(g, tree::AbstractString, x::Any, params; kwargs...)
+    tree = read_tree(tree)
+    return mcmc_sample(g, tree, x, params; kwargs...)
 end
 
 #======================================================#
@@ -267,20 +272,23 @@ end
 ######## Utils ########
 #=====================#
 
-function tmp_check_alphabet_consistency(g::PottsGraph, s0::CodonSequence)
+# function tmp_check_alphabet_consistency(g::PottsGraph, s0::CodonSequence)
+#     if isnothing(g.alphabet) || symbols(g.alphabet) != symbols(aa_alphabet)
+#         @warn """
+#             For now, sampling is only possible for graphs with the default alphabet $(aa_alphabet)
+#             Instead $(g.alphabet)
+#             """
+#     end
+#     return false
+# end
+function tmp_check_alphabet_consistency(g::PottsGraph, s0::Union{AASequence,CodonSequence})
     if isnothing(g.alphabet) || symbols(g.alphabet) != symbols(aa_alphabet)
         @warn """
             For now, sampling is only possible for graphs with the default alphabet $(aa_alphabet)
-            Instead $(g.alphabet)
-            """
-    end
-    return false
-end
-function tmp_check_alphabet_consistency(g::PottsGraph, s0::AASequence)
-    if isnothing(g.alphabet) || symbols(g.alphabet) != symbols(aa_alphabet)
-        @warn """
-            For now, sampling is only possible for graphs with the default alphabet $(aa_alphabet)
-            Instead $(g.alphabet)
+            Instead got `g.alphabet=`$(g.alphabet).
+            Possible fixes:
+            - use `NumSequence` instead of `AASequence` or `CodonSequence`
+            - set the potts model alphabet to `PottsEvolver.aa_alphabet`
             """
     end
     return false

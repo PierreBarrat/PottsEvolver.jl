@@ -2,10 +2,16 @@
 
 [![Build Status](https://github.com/PierreBarrat/PottsEvolver.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/PierreBarrat/PottsEvolver.jl/actions/workflows/CI.yml?query=branch%3Amaster)
 
-In progress.
-
 Simulate protein evolution using a Potts model and MCMC sampling. 
-Can simulate either a linear chain, or along branches of a tree. 
+Can simulate either a single lineage sampled at given times, or along branches of a tree. 
+
+This is the code used for the paper. 
+```
+Generative continuous time model reveals epistatic signatures in protein evolution
+Andrea Pagnani & Pierre Barrat-Charlaix
+biorXiv, https://doi.org/10.1101/2025.09.17.676821
+```
+Please cite it if you use the package in your work. 
 
 To learn more, check out the example Pluto notebook at `examples/example_notebook.jl`. 
 
