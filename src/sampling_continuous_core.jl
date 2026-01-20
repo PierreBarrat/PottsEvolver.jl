@@ -15,7 +15,7 @@ end
     t::Float64 # internal time
     i::Union{Nothing,Integer} # position of the next mutation
     x::Union{Nothing,Integer} # state of the next mutation
-    R::Union{Nothing,FloatType} = nothing # average transition rate, used for scaling
+    R::Union{Nothing,FloatType} = nothing # average transition rate - Ω in paper
     energy::Union{Nothing,FloatType}
     function CTMCState{S}(sequence::S, q::Integer, L::Integer) where {S<:AbstractSequence}
         return new{S}(
@@ -448,18 +448,17 @@ end
 
 # Case with using the previous sequence ~ update
 """
-    compute_energy_differences(
-        ΔE::Vector{<:AbstractFloat},
+    compute_energy_differences!(
+        ΔE::Matrix{FloatType},
+        ref_ΔE::Matrix{FloatType},
         refseq::AbstractSequence,
         i::Integer,
         x::Integer,
         g::PottsGraph;
-        rng=Random.GLOBAL_RNG,
-        ΔE,
     )
     compute_energy_differences(refseq::AbstractSequence, g::PottsGraph)
 
-In the first form: define the new reference `b` sequence is equal to `refseq` at positions different from `i`, and to `x` at position `i`.
+In the first form: define the new reference `b` sequence as equal to `refseq` at positions different from `i`, and to `x` at position `i`.
 For all mutations `(j,z)`, giving rise to sequence `c`, compute `E(c)-E(b)` and store the result in output matrix `ΔE` of dimensions `qxL`.
 Keyword argument `ΔE` can be provided to avoid allocation.
 
@@ -475,7 +474,7 @@ function compute_energy_differences!(
     refseq::AbstractSequence,
     i::Integer,
     x::Integer,
-    g::PottsGraph,
+    g::PottsGraph;
 )
     q, L = size(ref_ΔE)
     ai = sequence(refseq)[i]
