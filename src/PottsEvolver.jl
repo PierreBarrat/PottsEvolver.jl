@@ -53,6 +53,7 @@ include("sampling_core.jl")
 #! format: on
 
 include("sampling_continuous_core.jl")
+export average_transition_rate
 
 include("sampling_chain.jl")
 #! format: off

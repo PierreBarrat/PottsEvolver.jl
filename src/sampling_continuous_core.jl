@@ -229,10 +229,10 @@ end
 #==============================================================================#
 
 """
-    average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence; kwargs...)
+    average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence)
     average_transition_rate(g::PottsGraph, step_type, S::Vector{<:AbstractSequence})
     average_transition_rate(
-        g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence, kwargs...
+        g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence
     )
 
 Compute the average transition rate for the continuous time Markov chain based on `g`.
@@ -259,28 +259,22 @@ function average_transition_rate(
     end
 
     sample_eq = mcmc_sample(
-        g, n_samples, params; alignment_output=false, init=s0, rng=rng, progress_meter
+        g, n_samples, params; alignment_output=false, init=s0, rng, progress_meter
     )
     sample_eq = sample_eq.sequences
     return average_transition_rate(g, step_type, sample_eq)
 end
 function average_transition_rate(
-    g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}; kwargs...
+    g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}
 )
-    state = CTMCState(S[1])
-    Rmean = mean(S) do sequence
-        copy!(state.seq, sequence)
-        sum(transition_rates!(state, g, step_type))
-    end
-
-    return Rmean
+    return mean(transition_rates(g, step_type, S))
 end
 function average_transition_rate(
-    g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence, kwargs...
+    g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence
 )
     aln = read_fasta(fastafile)
     sample = map(seq_type, aln)
-    return average_transition_rate(g, step_type, sample; kwargs...)
+    return average_transition_rate(g, step_type, sample)
 end
 
 #========================================================================#
@@ -296,6 +290,14 @@ Return the a `q` by `L` matrix `Q`. Allocates a `CTMCState`.
 function transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
     state = CTMCState(copy(sequence))
     return transition_rates!(state, g, step_type)
+end
+function transition_rates(g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence})
+    @argcheck !isempty(S) "Got empty sequence vector"
+    state = CTMCState(S[1])
+    return map(S) do sequence
+        copy!(state.seq, sequence)
+        sum(transition_rates!(state, g, step_type))
+    end
 end
 
 """
