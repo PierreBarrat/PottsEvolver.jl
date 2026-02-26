@@ -31,4 +31,4 @@ To learn more, check out the example Pluto notebook at `examples/example_noteboo
   Pluto.run()
   ```
   Pluto should start in a browser window.
-- Open the notebook from within Pluto. 
+- Open the notebook from within Pluto. The notebook file is in `example/example_notebook.jl`
