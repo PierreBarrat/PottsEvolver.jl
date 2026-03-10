@@ -291,6 +291,11 @@ function transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
     state = CTMCState(copy(sequence))
     return transition_rates!(state, g, step_type)
 end
+"""
+    transition_rates(g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence})
+
+Compute the summed transition rate of each sequence in `S`.
+"""
 function transition_rates(g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence})
     @argcheck !isempty(S) "Got empty sequence vector"
     state = CTMCState(S[1])
@@ -375,6 +380,12 @@ function transition_rates_gibbs!(state::CTMCState{<:CodonSequence}, g::PottsGrap
             Either use an `AASequence`, another step type, or do discrete sampling."""))
 end
 function transition_rates_gibbs!(state::CTMCState, g::PottsGraph)
+    # This does not look like Gibbs at first
+    # What this computes is $$ e^{E(x) - E(y)} / \sum_z e^{E(x) - E(z)} $$
+    # where x is the starting sequence, y is a neighbour at pos i
+    # and z is the ensemble of neighbours at pos i
+    # It is immediate that e^E(x) cancels out, giving us the normal gibbs term
+    # I do this because I have the ΔE matrix pre-computed anyway
     (q, L) = size(state)
     Eref = isnothing(state.energy) ? energy(state.seq, g) : state.energy
     @inbounds for i in 1:L
