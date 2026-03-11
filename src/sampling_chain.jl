@@ -7,7 +7,7 @@ function mcmc_sample_chain(
     time_steps::AbstractVector{<:Integer},
     s0::AbstractSequence,
     params::SamplingParameters;
-    rng=Random.GLOBAL_RNG,
+    rng=Random.default_rng(),
     progress_meter=true,
     alignment_output=true,
     translate_output=false,
@@ -68,7 +68,7 @@ function mcmc_sample_chain(
         @debug "Doing $T discrete steps"
         _, proposed, performed = mcmc_steps!(conf, g, T, params; rng, gibbs_holder)
         # storing the result in S
-        S[m+1] = copy(conf)
+        S[m + 1] = copy(conf)
         # misc.
         push!(
             log_info, (proposed=proposed, performed=performed, ratio=performed / proposed)
@@ -83,7 +83,7 @@ function mcmc_sample_chain(
         sequences,
         tvals=collect(time_steps),
         info=log_info,
-        params=return_params(params, s0)
+        params=return_params(params, s0),
     )
 end
 
@@ -96,7 +96,7 @@ function mcmc_sample_continuous_chain(
     time_steps::AbstractVector{<:AbstractFloat},
     s0::AbstractSequence,
     params::SamplingParameters;
-    rng=Random.GLOBAL_RNG,
+    rng=Random.default_rng(),
     progress_meter=true,
     alignment_output=true,
     translate_output=false,
@@ -171,22 +171,19 @@ function mcmc_sample_continuous_chain(
         # doing T steps on the current configuration
         @debug "Sampling for time $T"
         _, number_substitutions, substitutions = mcmc_steps!(
-            state, g, T, step_type; rng, params.track_substitutions,
+            state, g, T, step_type; rng, params.track_substitutions
         )
         # storing the result in S
-        S[m+1] = copy(state.seq)
+        S[m + 1] = copy(state.seq)
         # misc.
         substitutions = if params.track_substitutions
             # add the substitutions of the last T steps
-            substitutions[(end-number_substitutions+1):end]
+            substitutions[(end - number_substitutions + 1):end]
         else
             # not tracking substitutions
-            Tuple{Mutation, Float64}[]
+            Tuple{Mutation,Float64}[]
         end
-        new_info = (;
-            number_substitutions,
-            substitutions,
-        )
+        new_info = (; number_substitutions, substitutions)
         push!(log_info, new_info)
         t_previous = t_now
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
@@ -197,7 +194,7 @@ function mcmc_sample_continuous_chain(
         sequences,
         tvals=collect(time_steps),
         info=log_info,
-        params=return_params(params, s0)
+        params=return_params(params, s0),
     )
 end
 

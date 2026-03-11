@@ -18,9 +18,8 @@ function mcmc_steps!(
     g::PottsGraph,
     num_steps::Integer,
     p::SamplingParameters;
-    rng=Random.GLOBAL_RNG,
+    rng=Random.default_rng(),
     gibbs_holder=get_gibbs_holder(sequence),
-    verbose=false,
 )
     @argcheck length(sequence) == size(g).L """
     Size of sequence and model do not match: $(length(sequence)) and $(size(g).L)
@@ -78,13 +77,18 @@ the input arguments should be
 #===============================================================#
 
 function gibbs_step!(
-    s::CodonSequence, g::PottsGraph, params::SamplingParameters, gibbs_holder; kwargs...
+    s::CodonSequence,
+    g::PottsGraph,
+    params::SamplingParameters,
+    gibbs_holder;
+    rng=Random.default_rng(),
+    kwargs...,
 )
     p = params.fraction_gap_step
-    return if rand() < p
-        gap_metropolis_step!(s, g; kwargs...)
+    return if rand(rng) < p
+        gap_metropolis_step!(s, g; rng, kwargs...)
     else
-        aa_gibbs_step!(s, g, gibbs_holder; kwargs...)
+        aa_gibbs_step!(s, g, gibbs_holder; rng, kwargs...)
     end
 end
 
@@ -98,7 +102,7 @@ end
 Change one coding codon in `s` into another coding codon.
 """
 function aa_gibbs_step!(
-    s::CodonSequence, g::PottsGraph, gibbs_holder; rng=Random.GLOBAL_RNG
+    s::CodonSequence, g::PottsGraph, gibbs_holder; rng=Random.default_rng(), kwargs...
 )
     p = gibbs_holder
     # new_codons and new_aas are arrays but should _NOT_ be mutated
@@ -110,11 +114,11 @@ function aa_gibbs_step!(
         return (i=i, new_state=s[i], accepted=accepted, changed=false)
     end
 
-    # Compute the Boltzmann distribution
     # Constructing the gibbs field p
+    # Values only initialized for accessible amino acids `new_aas`
     for (a, aanew) in enumerate(new_aas)
         if aanew == aaref
-            p[a] = 0.0 # energy for now
+            p[a] = 0.0
         else
             # ΔE is minus the energy --> softmax(ΔE) is the Boltzmann distribution
             # ~ high ΔE is more probable
@@ -129,12 +133,13 @@ function aa_gibbs_step!(
         end
     end
 
-    # Sampling from p
+    # Sample from p
     if length(new_aas) < length(p)
+        # Unaccessible aas should have 0 probability
         p[(length(new_aas) + 1):end] .= -Inf
     end
     softmax!(p)
-    c = sample_from_weights(p)
+    c = _sample_from_weights(rng, p)
     s[i] = new_codons[c]
     s.aaseq[i] = new_aas[c]
     changed = (new_aas[c] != aaref)
@@ -149,16 +154,16 @@ function aa_gibbs_step!(
 end
 
 function gap_metropolis_step!(
-    s::CodonSequence, g::PottsGraph; rng=Random.GLOBAL_RNG, kwargs...
+    s::CodonSequence, g::PottsGraph; rng=Random.default_rng(), kwargs...
 )
-    i = rand(1:length(s))
+    i = rand(rng, 1:length(s))
     codon_ref = s.seq[i]
     aa_ref = s.aaseq[i]
     # di Bari et. al.
     β = 1 / n_aa_codons # aa to gap transition
     if codon_ref == gap_codon_index
         # Pick any non gap codon and try to mutate to it
-        codon_new = rand(coding_codons)
+        codon_new = rand(rng, coding_codons)
         aa_new = genetic_code(codon_new)
         ΔE = -aa_degeneracy(aa_new) + aa_degeneracy(aa_ref)
         ΔE += g.h[aa_new, i] - g.h[aa_ref, i]
@@ -168,10 +173,10 @@ function gap_metropolis_step!(
             end
         end
 
-        return _metropolis_step!(s, ΔE, i, codon_new, aa_new, aa_ref)
+        return _metropolis_step!(rng, s, ΔE, i, codon_new, aa_new, aa_ref)
     else
         # Try to replace s[i] by the gap codon
-        if rand() < 1 - β
+        if rand(rng) < 1 - β
             # with probability 1-β do nothing
             # return value below should match _metropolis_step!(::CodonSequence, ...)
             (i=i, new_state=s[i], accepted=false, changed=false)
@@ -187,19 +192,19 @@ function gap_metropolis_step!(
                 end
             end
 
-            return _metropolis_step!(s, ΔE, i, codon_new, aa_new, aa_ref)
+            return _metropolis_step!(rng, s, ΔE, i, codon_new, aa_new, aa_ref)
         end
     end
 end
 
-function _metropolis_step!(s::CodonSequence, ΔE, i, codon_new, aa_new, aa_ref)
+function _metropolis_step!(rng, s::CodonSequence, ΔE, i, codon_new, aa_new, aa_ref)
     # Check for acceptance based on ΔE
     # if accepted, change s.seq and s.aaseq using codon_new/aa_new
     # otherwise, do nothing
-    return if ΔE >= 0 || rand() < exp(ΔE)
+    return if ΔE >= 0 || rand(rng) < exp(ΔE)
         s[i] = codon_new
         s.aaseq[i] = aa_new
-        (i=i, new_state=s[i], accepted=true, changed=aa_new == aa_ref)
+        (i=i, new_state=s[i], accepted=true, changed=(aa_new == aa_ref))
     else
         (i=i, new_state=s[i], accepted=false, changed=false)
     end
@@ -214,12 +219,12 @@ function gibbs_step!(
     g::PottsGraph,
     p::SamplingParameters, # not actually used, but the CodonSequence case needs it
     gibbs_holder;
-    rng=Random.GLOBAL_RNG,
+    rng=Random.default_rng(),
 )
     p = gibbs_holder
     q = length(gibbs_holder)
 
-    i = rand(1:length(s))
+    i = rand(rng, 1:length(s))
     a_ref = s[i]
     for a in 1:q
         if a == a_ref
@@ -236,8 +241,8 @@ function gibbs_step!(
     end
 
     softmax!(p)
-    c = wsample(p)
-    s[i] = wsample(p)
+    c = _sample_from_weights(rng, p)
+    s[i] = _sample_from_weights(rng, p)
     changed = (a_ref != s[i])
     return (; i, new_state=s[i], accepted=true, changed)
 end
@@ -253,14 +258,14 @@ Pick a valid codon to mutate in `s`.
 Return the position `i`, the base `b`, new potential codons and aas.
 Gap codons cannot be mutated using this.
 """
-function pick_aa_mutation(s::CodonSequence; rng=Random.GLOBAL_RNG)
+function pick_aa_mutation(s::CodonSequence; rng=Random.default_rng())
     max_cnt = 100
     cnt = 1
     # Pick i and b, and see if we can mutate the codon (if it's a gap we can't)
     @label again
     cnt += 1
-    i = rand(1:length(s))
-    b = rand(IntType(1):IntType(3))
+    i = rand(rng, 1:length(s))
+    b = rand(rng, IntType(1):IntType(3))
     codon = s[i]
     new_codons, new_aas = accessible_codons(codon, b)
     if cnt < max_cnt && (isnothing(new_codons) || isnothing(new_aas))
@@ -270,9 +275,9 @@ function pick_aa_mutation(s::CodonSequence; rng=Random.GLOBAL_RNG)
     end
 end
 
-function sample_from_weights(W)
+function _sample_from_weights(rng, W)
     # !!! Assumes W is normalized !!!
-    x = rand()
+    x = rand(rng)
     z = 0.0
     for (i, w) in enumerate(W)
         z += w

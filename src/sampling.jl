@@ -12,7 +12,7 @@
     )
     mcmc_sample(g, tvals::AbstractVector, s0, params::SamplingParameters; kwargs...)
 
-First form: sample `g` for `M` steps starting from `s0`, using parameters in `params`.
+First form: sample `g` for `M` steps starting from sequence `s0`, using parameters in `params`.
 Return value: named tuple with fields
 - `sequences`: alignment (or vector) of sequences
 - `tvals`: vector with the number of steps at each sample
@@ -20,6 +20,7 @@ Return value: named tuple with fields
 - `params`: parameters of the run.
 
 Second form: same, but initial sequence is provided through the `init` kwarg.
+See `?get_init_sequence` for details on how the initial sequence is determined from `init`.
 
 Third form: provide a set of times `tvals` at which samples are taken. Can also be used
 with the `init` kwarg.
@@ -54,11 +55,12 @@ function mcmc_sample(
     M::Integer,
     params::SamplingParameters;
     init=:random_num,
+    rng=Random.default_rng(),
     verbose=0,
     kwargs...,
 )
-    s0 = get_init_sequence(init, g; verbose)
-    return mcmc_sample(g, M, s0, params; verbose, kwargs...)
+    s0 = get_init_sequence(init, g; rng)
+    return mcmc_sample(g, M, s0, params; verbose, rng, kwargs...)
 end
 
 function mcmc_sample(
@@ -87,10 +89,11 @@ function mcmc_sample(
     tvals::AbstractVector,
     params::SamplingParameters;
     init=:random_num,
+    rng=Random.default_rng(),
     verbose=0,
     kwargs...,
 )
-    s0 = get_init_sequence(init, g; verbose)
+    s0 = get_init_sequence(init, g; verbose, rng)
     return mcmc_sample(g, tvals, s0, params; verbose, kwargs...)
 end
 
@@ -202,23 +205,25 @@ Try to guess a reasonable init sequence from `s0`:
   a random sequence of the corresponding type is created, using the length of `g`;
 - if `s0` is a vector of integers, convert it to `AASequence`, `CodonSequence` or `NumSequence`;
   the conversion type depends on the alphabet of `g` and on the maximum element of `s0`.
+
+The graph `g` is only used to determine the length of the sequence, and the alphabet size in the case of a numerical sequence.
 """
-function get_init_sequence(s0::Symbol, g::PottsGraph; kwargs...)
+function get_init_sequence(s0::Symbol, g::PottsGraph; rng=Random.default_rng(), kwargs...)
     (; L, q) = size(g)
     return if s0 == :random_codon
         @argcheck q == length(aa_alphabet) """
             For sampling from `CodonSequence`, graph alphabet size must be $(length(aa_alphabet)).
             Instead $q.
             """
-        CodonSequence(L)
+        CodonSequence(rng, L)
     elseif s0 == :random_aa
         @argcheck q == length(aa_alphabet) """
             For sampling from `AASequence`, graph alphabet size must be $(length(aa_alphabet)).
             Instead $q.
             """
-        AASequence(L)
+        AASequence(rng, L)
     elseif s0 == :random_num
-        NumSequence(L, q)
+        NumSequence(rng, L, q)
     else
         error(
             "Invalid symbol `init = $s0`. Options: `[:random_codon, :random_aa, :random_num]`",
@@ -226,12 +231,14 @@ function get_init_sequence(s0::Symbol, g::PottsGraph; kwargs...)
     end
 end
 get_init_sequence(s0::AbstractSequence, g; kwargs...) = copy(s0)
-function get_init_sequence(s0::AbstractVector{<:Integer}, g; verbose=true)
+function get_init_sequence(
+    s0::AbstractVector{<:Integer}, g; rng=Random.default_rng(), kwargs...
+)
     return if g.alphabet == aa_alphabet
         if maximum(s0) <= 21
             AASequence(s0)
         elseif 21 < maximum(s0) <= 65
-            CodonSequence(s0; source=:codon)
+            CodonSequence(s0; source=:codon, rng)
         else
             error("Sequence $s0 incompatible with graph of size $(size(g))")
         end

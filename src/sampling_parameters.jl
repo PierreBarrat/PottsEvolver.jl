@@ -41,7 +41,9 @@ This is done in two consecutive steps.
     end
 end
 
-function steps_from_branchlength(τ::Real, p::BranchLengthMeaning, L::Int)
+function steps_from_branchlength(
+    τ::Real, p::BranchLengthMeaning, L::Int; rng=Random.default_rng()
+)
     if p.type == :sweep
         τ *= L
     end
@@ -59,12 +61,12 @@ function steps_from_branchlength(τ::Real, p::BranchLengthMeaning, L::Int)
     elseif p.length == :round
         return round(Int, τ)
     elseif p.length == :poisson
-        return pois_rand(τ)
+        return pois_rand(rng, τ)
     else
         throw(ArgumentError("Invalid `length` field $(p.length)"))
     end
 end
-function steps_from_branchlength(::Missing, ::BranchLengthMeaning, L)
+function steps_from_branchlength(::Missing, ::BranchLengthMeaning, L; kwargs...)
     return throw(ArgumentError("""Got `missing` branch length.
            The input tree probably probably has a branch with unspecified length."""))
 end

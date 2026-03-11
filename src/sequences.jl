@@ -60,7 +60,11 @@ end
 
 Return a random `AASequence{T}` of length `L`.
 """
-AASequence(L::Integer; T=IntType) = AASequence(rand(T(1):T(length(aa_alphabet)), L))
+function AASequence(rng::AbstractRNG, L::Integer; T=IntType)
+    return AASequence(rand(rng, T(1):T(length(aa_alphabet)), L))
+end
+AASequence(L::Integer; T=IntType) = AASequence(Random.default_rng(), L; T)
+AASequence{T}(rng::AbstractRNG, L::Integer) where {T<:Integer} = AASequence(rng, L; T)
 AASequence{T}(L::Integer) where {T<:Integer} = AASequence(L; T)
 
 _sequence_alphabet(::Type{<:AASequence}; kwargs...) = aa_alphabet
@@ -99,11 +103,12 @@ Build a `CodonSequence` from `seq`:
 - if `source==:aa`, `seq` is interpreted as representing amino acids (see `aa_alphabet`);
   matching codons are randomly chosen using the `PottsEvolver.reverse_code_rand` method.
 """
-function CodonSequence(seq::AbstractVector{T}; source=:aa) where {T<:Integer}
+function CodonSequence(
+    seq::AbstractVector{T}; source=:aa, rng=Random.default_rng()
+) where {T<:Integer}
     return if source == :aa
-        CodonSequence(
-            convert(Vector{T}, map(reverse_code_rand, seq)), convert(Vector{T}, seq)
-        )
+        codons = map(x -> reverse_code_rand(x; rng), seq)
+        CodonSequence(convert(Vector{T}, codons), convert(Vector{T}, seq))
     elseif source == :codon
         aaseq = map(genetic_code, seq)
         any(isnothing, aaseq) && error("""
@@ -123,10 +128,26 @@ Sample `L` states at random of the type of `source` (`:aa` or `:codon`):
 
 Underlying integer type is `T`.
 """
-function CodonSequence(L::Int; source=:aa, T=IntType)
-    return CodonSequence(rand(T(1):T(length(aa_alphabet)), L); source)
+function CodonSequence(rng::AbstractRNG, L::Int; source=:aa, T=IntType)
+    # Base function
+    return if source == :aa
+        CodonSequence(rand(rng, T(1):T(length(aa_alphabet)), L); source, rng)
+    elseif source == :codon
+        codons = T.(rand(rng, coding_codons, L))
+        CodonSequence(codons; source=:codon, rng) # rng useless in this case
+    else
+        error("Unknown `source` $(source). Use `:aa` or `:codon`.")
+    end
 end
-CodonSequence{T}(L::Int; kwargs...) where {T<:Integer} = CodonSequence(L; T, kwargs...)
+function CodonSequence(L::Int; source=:aa, T=IntType)
+    return CodonSequence(Random.default_rng(), L; source, T)
+end
+function CodonSequence{T}(rng::AbstractRNG, L::Int; kwargs...) where {T<:Integer}
+    return CodonSequence(rng, L; T, kwargs...)
+end
+function CodonSequence{T}(L::Int; kwargs...) where {T<:Integer}
+    return CodonSequence{T}(Random.default_rng(), L, kwargs...)
+end
 
 ## Methods
 
@@ -200,11 +221,13 @@ function NumSequence(seq::AbstractVector)
     return nothing
 end
 
-function NumSequence{T,q}(L::Integer) where {T,q}
-    seq = rand(T(1):T(q), L)
+function NumSequence{T,q}(rng::AbstractRNG, L::Integer) where {T,q}
+    seq = rand(rng, T(1):T(q), L)
     return NumSequence{T,q}(seq)
 end
-NumSequence(L::Integer, q::Integer; T=IntType) = NumSequence{T,q}(L)
+NumSequence{T,q}(L::Integer) where {T,q} = NumSequence{T,q}(Random.default_rng(), L)
+NumSequence(rng::AbstractRNG, L::Integer, q::Integer; T=IntType) = NumSequence{T,q}(rng, L)
+NumSequence(L::Integer, q::Integer; T=IntType) = NumSequence(Random.default_rng(), L, q; T)
 
 Base.copy(x::NumSequence{T,q}) where {T,q} = NumSequence(copy(x.seq), q)
 function Base.copy!(dest::NumSequence{T,q}, source::NumSequence{T,q}) where {T,q}

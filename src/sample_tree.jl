@@ -26,21 +26,26 @@ Return a sampled copy `tree`.
   The code then falls back on the first form.
 """
 function mcmc_sample_continuous_tree(
-    g::PottsGraph, tree::Tree, params::SamplingParameters; init=:random_num, kwargs...
+    g::PottsGraph,
+    tree::Tree,
+    params::SamplingParameters;
+    init=:random_num,
+    rng=Random.default_rng(),
+    kwargs...,
 )
     # Pick initial sequence
-    s0 = get_init_sequence(init, g)
+    s0 = get_init_sequence(init, g; rng)
     # If burnin, then equilibrate the picked sequence first
     @unpack burnin = params
     if burnin > 0
         @info "Equilibrating root sequence with $(burnin) burnin steps... "
         gibbs_holder = get_gibbs_holder(s0)
-        time = @elapsed mcmc_steps!(s0, g, Float64(burnin), params; kwargs...) # Float(burnin) to ensure this goes to the continuous version
+        time = @elapsed mcmc_steps!(s0, g, Float64(burnin), params; rng, kwargs...) # Float(burnin) to ensure this goes to the continuous version
         @info "done in $time seconds"
     end
 
     # Sample and return the tree
-    return mcmc_sample_continuous_tree(g, tree, s0, params; kwargs...)
+    return mcmc_sample_continuous_tree(g, tree, s0, params; rng, kwargs...)
 end
 function mcmc_sample_continuous_tree(
     g::PottsGraph,
@@ -63,7 +68,7 @@ function mcmc_sample_continuous_tree!(
     g::PottsGraph,
     tree::Tree{<:Sequence{S}},
     params::SamplingParameters;
-    rng=Random.GLOBAL_RNG,
+    rng=Random.default_rng(),
 ) where {S<:AbstractSequence}
     tmp_check_alphabet_consistency(g, data(root(tree)).seq)
     @argcheck params.sampling_type == :continuous
@@ -82,6 +87,7 @@ function mcmc_sample_continuous_tree!(
 
     @unpack Teq, burnin = params
     Teq > 0 && @info "Sampling on a tree: `Teq` field in parameters is ignored" Teq
+    burnin > 0 && @info "`burnin` parameter ignored in this specialized function" burnin
 
     # Setting the CTMCState
     rootseq = data(root(tree)).seq
@@ -139,21 +145,26 @@ Return a sampled copy `tree`.
   The code then falls back on the first form.
 """
 function mcmc_sample_tree(
-    g::PottsGraph, tree::Tree, params::SamplingParameters; init=:random_num, kwargs...
+    g::PottsGraph,
+    tree::Tree,
+    params::SamplingParameters;
+    init=:random_num,
+    rng=Random.default_rng(),
+    kwargs...,
 )
     # Pick initial sequence
-    s0 = get_init_sequence(init, g)
+    s0 = get_init_sequence(init, g; rng)
     # If burnin, then equilibrate the picked sequence first
     @unpack burnin = params
     if burnin > 0
         @info "Equilibrating root sequence with $(burnin) burnin steps... "
         gibbs_holder = get_gibbs_holder(s0)
-        time = @elapsed mcmc_steps!(s0, g, burnin, params; gibbs_holder, kwargs...)
+        time = @elapsed mcmc_steps!(s0, g, burnin, params; gibbs_holder, rng, kwargs...)
         @info "done in $time seconds"
     end
 
     # Sample and return the tree
-    return mcmc_sample_tree(g, tree, s0, params; kwargs...)
+    return mcmc_sample_tree(g, tree, s0, params; rng, kwargs...)
 end
 function mcmc_sample_tree(
     g::PottsGraph,
@@ -169,7 +180,7 @@ end
 """
     mcmc_sample_tree!(
         g::PottsGraph, tree::Tree{<:Sequence{S}}, params::SamplingParameters;
-        rng=Random.GLOBAL_RNG,
+        rng=Random.default_rng(),
     ) where S <: AbstractSequence
 
 Sample one sequence per node of `tree`, and return `tree`.
@@ -179,7 +190,7 @@ function mcmc_sample_tree!(
     g::PottsGraph,
     tree::Tree{<:Sequence{S}},
     params::SamplingParameters;
-    rng=Random.GLOBAL_RNG,
+    rng=Random.default_rng(),
 ) where {S<:AbstractSequence}
     tmp_check_alphabet_consistency(g, data(root(tree)).seq)
     @argcheck params.sampling_type == :discrete
@@ -212,21 +223,25 @@ function mcmc_sample_tree!(
     return tree
 end
 
-function sample_children!(node::TreeNode{<:Sequence}, g, params, gibbs_holder; kwargs...)
+function sample_children!(
+    node::TreeNode{<:Sequence}, g, params, gibbs_holder; rng=Random.default_rng(), kwargs...
+)
     L = size(g).L
     for c in children(node)
         # copy the ancestral sequence
         s0 = copy(data(node).seq)
         # mcmc using it as an init
-        nsteps = steps_from_branchlength(branch_length(c), params.branchlength_meaning, L)
+        nsteps = steps_from_branchlength(
+            branch_length(c), params.branchlength_meaning, L; rng
+        )
         @debug """
         branchlen=$(branch_length(c)) - L=$L --> nsteps=$nsteps
         """
-        mcmc_steps!(s0, g, nsteps, params; gibbs_holder, kwargs...) # from sampling.jl
+        mcmc_steps!(s0, g, nsteps, params; gibbs_holder, rng, kwargs...) # from sampling.jl
         # copy result to child
         data!(c, Sequence(s0))
         # recursive
-        sample_children!(c, g, params, gibbs_holder; kwargs...)
+        sample_children!(c, g, params, gibbs_holder; rng, kwargs...)
     end
     return nothing
 end

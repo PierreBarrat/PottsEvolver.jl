@@ -220,16 +220,76 @@ end
 end
 
 @testset "Reproducibility" begin
-    L, q = 10, 5
-    g = PottsGraph(L, q; init=:null)
-    s0 = NumSequence(L, q)
-    params = SamplingParameters(; sampling_type=:discrete, Teq=10)
+    @testset "Discrete - Gibbs" begin
+        L, q = 10, 5
+        g = PottsGraph(L, q; init=:null)
+        params = SamplingParameters(; sampling_type=:discrete, Teq=10)
+        @testset "Input given" begin
+            s0 = NumSequence(L, q)
+            rng = Random.seed!(Xoshiro(123), 42)
+            aln_1 = mcmc_sample(g, 2, s0, params; rng).sequences
+            rng = Random.seed!(Xoshiro(123), 42)
+            aln_2 = mcmc_sample(g, 2, s0, params; rng).sequences
+            @test aln_1[1] == aln_2[1] && aln_1[2] == aln_2[2]
+        end
+        @testset "Input not given" begin
+            init = :random_num
+            rng = Random.seed!(Xoshiro(123), 42)
+            aln_1 = mcmc_sample(g, 2, params; rng, init).sequences
+            rng = Random.seed!(Xoshiro(123), 42)
+            aln_2 = mcmc_sample(g, 2, params; rng, init).sequences
+            @test aln_1[1] == aln_2[1] && aln_1[2] == aln_2[2]
+        end
+    end
+    @testset "Discrete - Gibbs - Codon" begin
+        L, q = 10, 21 # need 21 to sample from CodonSequence
+        g = PottsGraph(L, q; init=:null)
 
-    rng = Random.seed!(Xoshiro(123), 42)
-    aln_1 = mcmc_sample(g, 2, params; init=s0, rng).sequences
+        params = SamplingParameters(; sampling_type=:discrete, Teq=10, burnin=0)
+        init = :random_codon
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        for i in 1:10
+            @test aln_1[i] == aln_2[i]
+        end
+    end
 
-    rng = Random.seed!(Xoshiro(123), 42)
-    aln_1 = mcmc_sample(g, 2, params; init=s0, rng).sequences
+    # Add a test with a tree as input, both discrete and continuous, with different type of branch length interpretation
+    @testset "Discrete - Gibbs - Codon - Tree exact" begin
+        L, q = 10, 21 # need 21 to sample from CodonSequence
+        g = PottsGraph(L, q; init=:null)
+        tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
 
-    @test_broken aln_1[1] == aln_2[1] && aln_1[2] == aln_2[2]
+        params = SamplingParameters(; sampling_type=:discrete, Teq=10, burnin=0)
+        init = :random_codon
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, tree, params; rng, init).leaf_sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, tree, params; rng, init).leaf_sequences
+        for i in 1:8
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+
+    @testset "Discrete - Gibbs - Codon - Tree poisson" begin
+        L, q = 10, 21 # need 21 to sample from CodonSequence
+        g = PottsGraph(L, q; init=:null)
+        tree = TreeTools.Generate.balanced_binary_tree(8, 0.25)
+        params = SamplingParameters(;
+            sampling_type=:discrete,
+            Teq=10,
+            burnin=0,
+            branchlength_meaning=BranchLengthMeaning(:sweep, :poisson),
+        )
+        init = :random_codon
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, tree, params; rng, init).leaf_sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, tree, params; rng, init).leaf_sequences
+        for i in 1:8
+            @test aln_1[i] == aln_2[i]
+        end
+    end
 end

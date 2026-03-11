@@ -113,3 +113,80 @@ end
         @test R2 ≈ R3
     end
 end
+
+@testset "Reproducibility" begin
+    @testset "Continuous - Glauber" begin
+        L, q = 10, 21
+        g = PottsGraph(L, q; init=:null)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:glauber, Teq=1.0
+        )
+        init = :random_aa
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+    @testset "Continuous - Gibbs" begin
+        L, q = 10, 21
+        g = PottsGraph(L, q; init=:null)
+        params = SamplingParameters(; sampling_type=:continuous, step_type=:gibbs, Teq=1.0)
+        init = :random_aa
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+    @testset "Continuous - Sqrt - Codon" begin
+        L, q = 10, 21
+        g = PottsGraph(L, q; init=:null)
+        params = SamplingParameters(; sampling_type=:continuous, step_type=:sqrt, Teq=1.0)
+        init = :random_codon
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+    @testset "Continuous - metropolis - Num" begin
+        L, q = 10, 21
+        g = PottsGraph(L, q; init=:null)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:metropolis, Teq=1.0
+        )
+        init = :random_num
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+
+    @testset "Continuous - glauber - Codon - Tree" begin
+        L, q = 10, 21
+        g = PottsGraph(L, q; init=:null)
+        tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:glauber, Teq=1.0
+        )
+        init = :random_codon
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, tree, params; rng, init).leaf_sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, tree, params; rng, init).leaf_sequences
+
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+end

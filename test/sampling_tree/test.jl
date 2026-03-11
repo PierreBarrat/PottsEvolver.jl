@@ -186,7 +186,7 @@ end
     # test dispatch of mcmc_sample
     @testset "Proper dispatch" begin
         # from a TreeTools.Tree object
-        tree = balanced_binary_tree(8, 1.0)
+        tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
         result = mcmc_sample(g, tree, params; init)
         @test propertynames(result) ==
             (:tree, :leaf_sequences, :internal_sequences, :params)

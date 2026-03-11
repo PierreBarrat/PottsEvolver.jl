@@ -47,15 +47,16 @@ function PottsGraph(
     L,
     q,
     T=FloatType;
+    rng=Random.default_rng(),
     init=:null,
-    Jrand=N -> 1 / L * randn(N, N),
-    hrand=N -> 1 / sqrt(L) * randn(N),
+    Jrand=N -> 1 / L * randn(rng, N, N),
+    hrand=N -> 1 / sqrt(L) * randn(rng, N),
     alphabet=(q == 21 ? aa_alphabet : nothing),
 )
     return if init == :null
         PottsGraph(; J=zeros(T, q, q, L, L), h=zeros(T, q, L), alphabet)
     elseif init == :rand
-        J, h = _random_graph(L, q)
+        J, h = _random_graph(rng, L, q)
         PottsGraph(; J, h, alphabet)
     end
 end
@@ -64,9 +65,10 @@ function Base.size(g::PottsGraph)
     return (L=size(g.h, 2), q=size(g.h, 1))
 end
 
-function _random_graph(L, q)
-    h = reshape(randn(L * q), q, L) / sqrt(L)
-    J = reshape(randn(L * L * q * q), q, q, L, L) / L
+_random_graph(L::Integer, q::Integer) = _random_graph(Random.default_rng(), L, q)
+function _random_graph(rng, L, q)
+    h = reshape(randn(rng, L * q), q, L) / sqrt(L)
+    J = reshape(randn(rng, L * L * q * q), q, q, L, L) / L
     for i in 1:L
         J[:, :, i, i] .= 0
         for j in (i + 1):L
@@ -242,8 +244,8 @@ Return a PottsGraph with only fields that fits the single site frequencies in `f
 length of the sequence.
 Pseudocount ratio `pc` is used.
 """
-function profile_model(f1::AbstractMatrix; pc = 1e-2, alphabet=nothing)
+function profile_model(f1::AbstractMatrix; pc=1e-2, alphabet=nothing)
     q, L = size(f1)
-    h = log.(pc * ones(Float64, q, L)/q  + (1-pc)*f1)
-    return PottsGraph(; J = zeros(q, q, L, L), h, alphabet)
+    h = log.(pc * ones(Float64, q, L) / q + (1 - pc) * f1)
+    return PottsGraph(; J=zeros(q, q, L, L), h, alphabet)
 end

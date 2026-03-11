@@ -121,13 +121,11 @@ end
 #=================================#
 
 function gillespie!(
-    state, g, Tmax, step_type; rng=Random.GLOBAL_RNG, track_substitutions=false
+    state, g, Tmax, step_type; rng=Random.default_rng(), track_substitutions=false
 )
     Tmax == 0 && return Float64[]
 
     q, L = size(state)
-    # times = Float64[]
-    # sizehint!(times, Tmax*L)
     n_substitutions = 0
 
     t = 0
@@ -248,7 +246,7 @@ function average_transition_rate(
     g::PottsGraph,
     step_type,
     s0::AbstractSequence;
-    rng=Random.GLOBAL_RNG,
+    rng=Random.default_rng(),
     progress_meter=true,
     params=nothing,
     n_samples=250,

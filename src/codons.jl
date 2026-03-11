@@ -129,19 +129,21 @@ Return the set of codons coding for `aa`.
 reverse_code(aa::T) where {T<:Integer} = _reverse_code_integers[aa]
 reverse_code(aa::AbstractChar) = _reverse_code_struct[aa]
 """
-    reverse_code_rand(aa)
+    reverse_code_rand(aa; rng)
 
 Return a random codon coding for `aa`
 """
-function reverse_code_rand(aa::Integer)
+function reverse_code_rand(aa::Integer; rng=Random.default_rng())
     codons = reverse_code(aa)
     # @info codons
     if isempty(codons)
         error("No codon corresponds to amino acid $aa ($aa_alphabet(aa))")
     end
-    return rand(codons)
+    return rand(rng, codons)
 end
-reverse_code_rand(aa::AbstractChar) = codon_alphabet(reverse_code_rand(aa_alphabet(aa)))
+function reverse_code_rand(aa::AbstractChar; kwargs...)
+    return codon_alphabet(reverse_code_rand(aa_alphabet(aa)); kwargs...)
+end
 
 #========================================================================#
 ######################### Codon helper functions #########################

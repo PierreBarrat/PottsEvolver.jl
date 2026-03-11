@@ -139,3 +139,36 @@ end
     @test A isa Alignment{Char,PottsEvolver.IntType}
     @test A.alphabet == aa_alphabet
 end
+
+@testset "Reproducibility" begin
+    rng = Random.default_rng()
+    L = 10
+    @testset "AA sequence" begin
+        Random.seed!(rng, 42)
+        s1 = AASequence(rng, L; T=Int)
+        Random.seed!(rng, 42)
+        s2 = AASequence(rng, L; T=Int)
+        Random.seed!(rng, 42)
+        s3 = AASequence{Int}(rng, L)
+
+        @test s1 == s2
+        @test s1 == s3
+    end
+    @testset "Codon sequence" begin
+        Random.seed!(rng, 42)
+        s1 = CodonSequence(rng, L; T=Int, source=:aa)
+        Random.seed!(rng, 42)
+        s2 = CodonSequence(rng, L; T=Int, source=:aa)
+        Random.seed!(rng, 42)
+        s3 = CodonSequence{Int}(rng, L; source=:aa)
+
+        @test s1 == s2
+        @test s1 == s3
+
+        Random.seed!(rng, 42)
+        s4 = CodonSequence(rng, L; T=Int, source=:codon)
+        Random.seed!(rng, 42)
+        s5 = CodonSequence(rng, L; T=Int, source=:codon)
+        @test s4 == s5
+    end
+end
