@@ -81,4 +81,6 @@ export read_graph, read_potts_graph
 - IO.jl: for reading Potts models -- alignment/sequence IO is done through BioSequenceMappings
 =#
 
+include("Parallel/Parallel.jl")
+
 end
