@@ -6,22 +6,22 @@
   burnin = 100
   step_meaning = :accepted
   fraction_gap_step = 0.9
-  branchlength_meaning = BranchLengthMeaning(:step, :exact)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; initial_sequence = AASequence(L)</code><code class="nohighlight hljs ansi" style="display:block;">AASequence{Int64}([4, 6, 1, 8, 19, 5, 12, 1, 13, 14, 16, 14, 18, 13, 21, 20, 18, 5, 1, 1])</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result = mcmc_sample(g, M, params; init=initial_sequence);</code></pre><p>The output is a named tuple with the following fields:</p><ul><li><code>sequences</code>: an alignment or vector of sampled sequences.</li><li><code>tvals</code>: a vector with the number of steps at each sample.</li><li><code>info</code>: information about the run.</li><li><code>params</code>: parameters used for the run as a <code>Dict</code>. </li></ul><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.sequences # a BioSequenceMappings.Alignment</code><code class="nohighlight hljs ansi" style="display:block;">Alignment of M=5 sequences of length L=20 - Shown as `MxL` matrix
+  branchlength_meaning = BranchLengthMeaning(:step, :exact)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; initial_sequence = AASequence(L)</code><code class="nohighlight hljs ansi" style="display:block;">AASequence{Int64}([17, 20, 14, 14, 14, 11, 3, 10, 12, 11, 14, 3, 5, 16, 17, 20, 14, 21, 13, 3])</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result = mcmc_sample(g, M, params; init=initial_sequence);</code></pre><p>The output is a named tuple with the following fields:</p><ul><li><code>sequences</code>: an alignment or vector of sampled sequences.</li><li><code>tvals</code>: a vector with the number of steps at each sample.</li><li><code>info</code>: information about the run.</li><li><code>params</code>: parameters used for the run as a <code>Dict</code>. </li></ul><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.sequences # a BioSequenceMappings.Alignment</code><code class="nohighlight hljs ansi" style="display:block;">Alignment of M=5 sequences of length L=20 - Shown as `MxL` matrix
 5×20 adjoint(::Matrix{Int64}) with eltype Int64:
- 18   7   7  19  20   6   3   2  12  …   6   2  18  12  14   3  16  12  21
- 17  14  15  21   8  10  10  19  18      4   3   5  11  13   4  16   9   3
- 10  15  18  11  11   6  12   1   6      4   1   9  11   8   5   9  10   1
- 18   1  17  15  11   8   2   8  16     15  10  16  12   9  20  10  17   1
- 20   6   1   5  21  17   7   8  11     19   6  13  18  14  21  18  19   7</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; write(&quot;/tmp/example.fasta&quot;, result.sequences) # can be written to fasta format</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; run(`cat /tmp/example.fasta`) # headers correspond to the time of sampling</code><code class="nohighlight hljs ansi" style="display:block;">&gt;100
-TGGVWFCAMRAFATMPCRMY
+  6  17  18   7  19   3  9   6  17  19  19   5  15  19  6  21  16  14  12   4
+ 11  15  17   7  11   9  3  19  16   8  12   9  16  10  6  21  12   1  12  10
+ 12  14  21  20  18  12  9   1   1  21  12   8   3  10  2   3   5  10  13   2
+ 13   6   7   1   3  16  8  10   9  17   8   5   5  19  2  11  16   3  12   4
+  2  15   1  20  21  20  8  17   3  15  20  18  21   5  2  13   5  19  16   7</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; write(&quot;/tmp/example.fasta&quot;, result.sequences) # can be written to fasta format</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; run(`cat /tmp/example.fasta`) # headers correspond to the time of sampling</code><code class="nohighlight hljs ansi" style="display:block;">&gt;100
+FSTGVCIFSVVEQVFYRPMD
 &gt;150
-SPQYHKKVTRADCELNDRIC
+LQSGLICVRHMIRKFYM-MK
 &gt;200
-KQTLLFM-FTAD-ILHEIK-
+MPYWTMI--YMHCKACEKNA
 &gt;250
-T-SQLHAHRTPQKRMIWKS-
+NFG-CRHKISHEEVALRCMD
 &gt;300
-WF-EYSGHLKCVFNTPYTVG
+AQ-WYWHSCQWTYEANEVRG
 Process(`<span class="sgr4">cat</span> <span class="sgr4">/tmp/example.fasta</span>`, ProcessExited(0))</code></pre><p>The <code>burnin</code> parameter means that 100 steps are performed before taking the first sample in the chain.  The first sequence of the chain is therefore different from <code>initial_sequence</code>: </p><pre><code class="language-julia-repl hljs">julia&gt; AASequence(result.sequences[1]) != initial_sequence
 true</code></pre><p>If we want to start the chain from a specific sequence, we just set <code>burnin</code> to 0.</p><pre><code class="language-julia-repl hljs">julia&gt; params = SamplingParameters(; sampling_type=:discrete, Teq=50, burnin=0);
 
@@ -67,22 +67,22 @@ _|
                           |________________________|
                                                    |_________________________ 6</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.tree.root.data.seq == initial_sequence # the initial sequence is placed at the root</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre><p>The return value contains alignments of leaf and internal node sequences.  Sequences in the alignments are labeled according to the labels of the nodes in the input tree. If nodes are not labeled in the input tree, they are automatically assigned labels which can be read in the output tree. </p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.internal_sequences</code><code class="nohighlight hljs ansi" style="display:block;">Alignment of M=7 sequences of length L=20 - Shown as `MxL` matrix
 7×20 adjoint(::Matrix{Int64}) with eltype Int64:
- 15  18  16   6   8   5  18   2   9  …  14   2   1  17  13  19  12  15  19
- 13  20   1  10   4  13   4   3  15      2  16  20  19  17   2  14  17  20
- 12   4   3  20  20  21   9   3   1      4  16  11   2  10  19  14   5  17
-  6  10   1  21  21   5   2  16  17      3   9  18   9  18  16   3   1   9
-  5   2   8   7   1  11  17  15  21      3  16   4   5  17   2  14  12  15
- 21   3   2   8  20   5  21   4  14  …   3  12  18  13  10   3   8   1   5
-  4   6   1   8  19   5  12   1  13     14  18  13  21  20  18   5   1   1</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.leaf_sequences</code><code class="nohighlight hljs ansi" style="display:block;">Alignment of M=8 sequences of length L=20 - Shown as `MxL` matrix
+  1  14   9  14  15   9  14   5  17  …  16   4   4  15  18  16   8   2  15
+ 14   9  13   7  19  20  12  13   4      7  18  18  10  12  12   9  20  11
+  4  17  13  16  10  15  21  13  17      3   4   4  15  16  12   1  17   2
+ 16  15   7   1  20  15  12  18   8     16   3  21  21  16   7   7  10   5
+  7  17  16  10   9   7  20  21   2     18   4  18   4   7   7  17  19   3
+ 18   4  15  10   6   6  15   6   9  …  17   3  21   9  20   7  19  16   5
+ 17  20  14  14  14  11   3  10  12      3   5  16  17  20  14  21  13   3</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.leaf_sequences</code><code class="nohighlight hljs ansi" style="display:block;">Alignment of M=8 sequences of length L=20 - Shown as `MxL` matrix
 8×20 adjoint(::Matrix{Int64}) with eltype Int64:
-  4   9   7   6  21  12  21   6   2  …   9  10  19   6  13   1   5  16  17
- 11   5   6   4  18  18   2   5   6     12   2  15  17  13   1  12  11   6
-  9  10  20  10  19  17  13  12   5     11   2  15  19  20   6  21  17  14
- 20  15  20  20  21  10   1  11   1      3   2   9  17  17   2  14   4  19
- 12  10   9   9  20   9   8  15  15     14  16  11  15   4  14  13  16  17
- 18  19  11  12   7  19  11   3  17  …   2   5  11   4   8   8   4  21   9
-  6   2  20   9   2  11  10   8  17     18  16  17  20  11   1  17  21  15
- 21   2  19  10   3  15  21   6   5      2  16   1   7  13  20  18   8  12</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.leaf_sequences.names</code><code class="nohighlight hljs ansi" style="display:block;">8-element Vector{String}:
+ 11  16  16  12  17   6   2  11   3  …  13   3  16  14  18   7  10  17  20
+ 10   8   7   4  13  13  21   8  19     17   7  19   3  17  13   9  20  16
+  9  20   4  20  12  15  16  13   4     17  13  10   9   4  16  10  11  17
+  2   8  10   3  17   3  17   6  16      1   4  18   7  10   3   9  14   8
+ 16  15  19  15  21   1  20  16   4     15  10  21   1   5   3  17   1  15
+ 21   5   6   5  18  16   4  21  18  …  16   7   2  16   9   1  16   7  18
+ 12  19  16   5  14  16   1   7   7     10   4   9  11   2   9  15   7  16
+  1   9  15   5  15  16   2   2  11     18   8  18   7   5   7  16  19   3</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.leaf_sequences.names</code><code class="nohighlight hljs ansi" style="display:block;">8-element Vector{String}:
  &quot;1&quot;
  &quot;2&quot;
  &quot;7&quot;
@@ -94,22 +94,22 @@ _|
            g, &quot;../../example/small_tree_integers.nwk&quot;, params;
            init=initial_sequence, alignment_output=false
        );</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.leaf_sequences</code><code class="nohighlight hljs ansi" style="display:block;">Dict{String, AASequence{Int64}} with 8 entries:
-  &quot;3&quot; =&gt; AASequence{Int64}([13, 5, 12, 9, 11, 12, 14, 10, 19, 18, 20, 18, 20, 9…
-  &quot;4&quot; =&gt; AASequence{Int64}([20, 1, 14, 13, 16, 10, 7, 15, 16, 15, 11, 8, 2, 9, …
-  &quot;1&quot; =&gt; AASequence{Int64}([6, 17, 15, 11, 20, 10, 9, 1, 19, 6, 18, 10, 18, 7, …
-  &quot;5&quot; =&gt; AASequence{Int64}([6, 20, 17, 13, 3, 15, 10, 19, 20, 19, 10, 8, 16, 21…
-  &quot;2&quot; =&gt; AASequence{Int64}([4, 4, 11, 8, 4, 10, 6, 20, 11, 14, 12, 21, 6, 14, 4…
-  &quot;7&quot; =&gt; AASequence{Int64}([2, 3, 5, 19, 18, 11, 7, 9, 16, 6, 7, 20, 4, 5, 4, 1…
-  &quot;6&quot; =&gt; AASequence{Int64}([8, 11, 12, 16, 5, 20, 3, 17, 20, 4, 18, 21, 11, 19,…
-  &quot;8&quot; =&gt; AASequence{Int64}([20, 5, 3, 6, 9, 11, 1, 20, 12, 20, 20, 21, 16, 9, 2…</code></pre><p>It is sometimes useful to perform sampling several times in a row.  This is done by calling <code>mcmc_sample(graph, tree, M, params)</code>, where <code>M</code> is the number of repetitions.  In this case, it is can be practical to have all sequences sampled at a given node grouped in a single alignment, instead of having a list of alignments that each correspond to one tree.  This is achieved by calling <code>PottsEvolver.pernode_alignment</code> on the output of <code>mcmc_sample</code>:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; M = 5 # five repeats</code><code class="nohighlight hljs ansi" style="display:block;">5</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result = mcmc_sample(
+  &quot;3&quot; =&gt; AASequence{Int64}([18, 5, 19, 9, 18, 5, 5, 3, 3, 14, 18, 2, 3, 5, 6, 1…
+  &quot;4&quot; =&gt; AASequence{Int64}([18, 12, 7, 6, 6, 6, 3, 14, 6, 5, 6, 21, 4, 12, 20, …
+  &quot;1&quot; =&gt; AASequence{Int64}([16, 6, 21, 18, 9, 15, 10, 13, 4, 20, 2, 19, 17, 4, …
+  &quot;5&quot; =&gt; AASequence{Int64}([20, 6, 3, 14, 7, 7, 17, 13, 3, 21, 2, 21, 17, 2, 2,…
+  &quot;2&quot; =&gt; AASequence{Int64}([19, 21, 15, 15, 9, 17, 1, 20, 3, 11, 13, 15, 5, 7, …
+  &quot;7&quot; =&gt; AASequence{Int64}([17, 21, 5, 7, 15, 10, 16, 20, 12, 6, 9, 7, 16, 18, …
+  &quot;6&quot; =&gt; AASequence{Int64}([15, 13, 14, 13, 8, 14, 14, 2, 1, 3, 21, 5, 7, 14, 7…
+  &quot;8&quot; =&gt; AASequence{Int64}([5, 6, 1, 12, 15, 12, 16, 13, 1, 8, 15, 1, 3, 6, 11,…</code></pre><p>It is sometimes useful to perform sampling several times in a row.  This is done by calling <code>mcmc_sample(graph, tree, M, params)</code>, where <code>M</code> is the number of repetitions.  In this case, it is can be practical to have all sequences sampled at a given node grouped in a single alignment, instead of having a list of alignments that each correspond to one tree.  This is achieved by calling <code>PottsEvolver.pernode_alignment</code> on the output of <code>mcmc_sample</code>:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; M = 5 # five repeats</code><code class="nohighlight hljs ansi" style="display:block;">5</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result = mcmc_sample(
            g, &quot;../../example/small_tree_integers.nwk&quot;, M, params; init=initial_sequence
        );</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result = PottsEvolver.pernode_alignment(result);</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; result.sequences[&quot;1&quot;] # all sequences sampled at node &quot;1&quot;</code><code class="nohighlight hljs ansi" style="display:block;">Alignment of M=5 sequences of length L=20 - Shown as `MxL` matrix
 5×20 adjoint(::Matrix{Int64}) with eltype Int64:
-  1   2   6  18  15   1   6   9  15  …  19  17   4  20  21  11   9   3   7
- 17  13   2   2   1   2   6  16  13     20   1   2  21  21  17  16   5   5
- 13   3  15  11   1   4   3  16  18      2   9  17   9  12  12  15  19  19
-  9  16  12   6  19  12   5   2   3     20   7   4  20   5   3  11   7  19
- 17  10  17   6   9   6  17  14  11      9   4   7   1  20  19   5  17  15</code></pre><h3 id="Interpreting-branch-lengths"><a class="docs-heading-anchor" href="#Interpreting-branch-lengths">Interpreting branch lengths</a><a id="Interpreting-branch-lengths-1"></a><a class="docs-heading-anchor-permalink" href="#Interpreting-branch-lengths" title="Permalink"></a></h3><p>When sampling from a continuous time model, any real valued branch length is valid. Things get more complicated when sampling from a discrete model, where evolutionary time is measured in number of MCMC steps.  The <a href="../reference/#PottsEvolver.BranchLengthMeaning"><code>BranchLengthMeaning</code></a> type is used to facilitate this.  It is provided as a field of <code>SamplingParameters</code>. For instance</p><pre><code class="language-julia hljs">SamplingParameters(; branchlength_meaning=BranchLengthMeaning(; type=:sweep, length=:exact))</code></pre><p>will first multiply each branch in the tree by a factor <code>L</code> (length of the sequence), and expects the result to be exactly an integer. </p><h2 id="Continuous-time-sampling"><a class="docs-heading-anchor" href="#Continuous-time-sampling">Continuous time sampling</a><a id="Continuous-time-sampling-1"></a><a class="docs-heading-anchor-permalink" href="#Continuous-time-sampling" title="Permalink"></a></h2><p>Discrete sampling is quite straightforward: the time corresponds to a discrete number of mcmc steps.  In continuous time however, it is customary to scale time so that the expected number of mutations per site per unit of time is 1.  This is done by setting the <code>average_substitution_rate</code> field of <code>SamplingParameters</code>, see <a href="https://doi.org/10.1101/2025.09.17.676821">Generative continuous time model reveals epistatic signatures in protein evolution</a>. This average substituion rate can be computed either by sampling the potts model or by using an existing alignment of sequences. </p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; n_samples = 100 # compute the average transition rate from 100 samples</code><code class="nohighlight hljs ansi" style="display:block;">100</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Teq = 10*L; # discrete steps between samples</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; step_type = :glauber;</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ω_1 = let
+ 16  10  14   4   4   3   2   6  11  …  18  12   9  11  21  16   8   8  15
+ 21  10  11  18  19  11  12  10  14      9  20  19   2   2  17   8  19  13
+ 21  15  18  15  18  21   6   8   4     13  16  17  13  12  15  17  13   7
+ 16  10   3   7  21   6  17   6   6      1  15   9  17   9  11  19  10   2
+ 12  10  15  15   8  11  14   7   1      3   6  21   5   4  13  15  11  15</code></pre><h3 id="Interpreting-branch-lengths"><a class="docs-heading-anchor" href="#Interpreting-branch-lengths">Interpreting branch lengths</a><a id="Interpreting-branch-lengths-1"></a><a class="docs-heading-anchor-permalink" href="#Interpreting-branch-lengths" title="Permalink"></a></h3><p>When sampling from a continuous time model, any real valued branch length is valid. Things get more complicated when sampling from a discrete model, where evolutionary time is measured in number of MCMC steps.  The <a href="../reference/#PottsEvolver.BranchLengthMeaning"><code>BranchLengthMeaning</code></a> type is used to facilitate this.  It is provided as a field of <code>SamplingParameters</code>. For instance</p><pre><code class="language-julia hljs">SamplingParameters(; branchlength_meaning=BranchLengthMeaning(; type=:sweep, length=:exact))</code></pre><p>will first multiply each branch in the tree by a factor <code>L</code> (length of the sequence), and expects the result to be exactly an integer. </p><h2 id="Continuous-time-sampling"><a class="docs-heading-anchor" href="#Continuous-time-sampling">Continuous time sampling</a><a id="Continuous-time-sampling-1"></a><a class="docs-heading-anchor-permalink" href="#Continuous-time-sampling" title="Permalink"></a></h2><p>Discrete sampling is quite straightforward: the time corresponds to a discrete number of mcmc steps.  In continuous time however, it is customary to scale time so that the expected number of mutations per site per unit of time is 1.  This is done by setting the <code>substitution_rate</code> field of <code>SamplingParameters</code>, see <a href="https://doi.org/10.1101/2025.09.17.676821">Generative continuous time model reveals epistatic signatures in protein evolution</a>. This average substituion rate can be computed either by sampling the potts model or by using an existing alignment of sequences. </p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; n_samples = 100 # compute the average transition rate from 100 samples</code><code class="nohighlight hljs ansi" style="display:block;">100</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Teq = 10*L; # discrete steps between samples</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; step_type = :glauber;</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ω_1 = let
            # first generate sample with discrete time, then use it to compute the average rate
            s0 = AASequence(L)
            params = SamplingParameters(; sampling_type=:discrete, Teq)
@@ -118,22 +118,22 @@ _|
            aln = map(AASequence, aln)
            # compute the average transition rate from the sampled alignment
            PottsEvolver.average_transition_rate(g, step_type, aln)
-       end</code><code class="nohighlight hljs ansi" style="display:block;">193.48655308240185</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ω_2 = let
+       end</code><code class="nohighlight hljs ansi" style="display:block;">195.75625091589072</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ω_2 = let
            # Read the previously sampled alignment, stored in a fasta
            # Ω_1 == Ω_2
            PottsEvolver.average_transition_rate(g, step_type, &quot;/tmp/tmp.fasta&quot;)
-       end</code><code class="nohighlight hljs ansi" style="display:block;">193.48655308240185</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ω_3 = let
+       end</code><code class="nohighlight hljs ansi" style="display:block;">195.75625091589072</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; Ω_3 = let
            # call the average_transition_rate function directly, which will sample the potts model
            s0 = AASequence(L)
            PottsEvolver.average_transition_rate(g, step_type, s0; n_samples, Teq)
-       end</code><code class="nohighlight hljs ansi" style="display:block;">190.02859162220207</code></pre><p>Now, define <code>SamplingParameters(; sampling_type=:continuous, average_substitution_rate=Ω_1)</code> to have a time-normalized MCMC. </p><hr/><h2 id="Additional-Utilities"><a class="docs-heading-anchor" href="#Additional-Utilities">Additional Utilities</a><a id="Additional-Utilities-1"></a><a class="docs-heading-anchor-permalink" href="#Additional-Utilities" title="Permalink"></a></h2><h3 id="Logging"><a class="docs-heading-anchor" href="#Logging">Logging</a><a id="Logging-1"></a><a class="docs-heading-anchor-permalink" href="#Logging" title="Permalink"></a></h3><p>You can control the verbosity of the sampling process using the <code>verbose</code> and <code>logfile</code> parameters:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; result = mcmc_sample(g, 1000, params; init=:random_aa, verbose=1);</code><code class="nohighlight hljs ansi" style="display:block;">┌ Info: Sampling 1000 sequences using the following settings:
+       end</code><code class="nohighlight hljs ansi" style="display:block;">190.65954612062666</code></pre><p>Now, define <code>SamplingParameters(; sampling_type=:continuous, substitution_rate=Ω_1)</code> to have a time-normalized MCMC. </p><hr/><h2 id="Additional-Utilities"><a class="docs-heading-anchor" href="#Additional-Utilities">Additional Utilities</a><a id="Additional-Utilities-1"></a><a class="docs-heading-anchor-permalink" href="#Additional-Utilities" title="Permalink"></a></h2><h3 id="Logging"><a class="docs-heading-anchor" href="#Logging">Logging</a><a id="Logging-1"></a><a class="docs-heading-anchor-permalink" href="#Logging" title="Permalink"></a></h3><p>You can control the verbosity of the sampling process using the <code>verbose</code> and <code>logfile</code> parameters:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; result = mcmc_sample(g, 1000, params; init=:random_aa, verbose=1);</code><code class="nohighlight hljs ansi" style="display:block;">┌ Info: Sampling 1000 sequences using the following settings:
 │     - Type of sampling: discrete
 │     - Type of sequence = AASequence{Int64}
 │     - Step style = gibbs
 │     - Step meaning = accepted
 │     - Fraction of gap steps (if codon) = 0.9
 └     - Initial/last time step: 0/49950
-[ Info: Initial sequence: AASequence{Int64}([19, 10, 4, 15, 1, 13, 13, 8, 12, 8, 5, 4, 5, 17, 1, 5, 3, 16, 7, 17])
+[ Info: Initial sequence: AASequence{Int64}([1, 10, 12, 17, 12, 14, 11, 2, 18, 15, 6, 8, 2, 10, 8, 12, 21, 17, 5, 17])
 [ Info: Initializing with 0 burnin iterations... 
 [ Info: Sampling...
-[ Info: Sampling done in 0.628777712 seconds</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../pottsgraph/">« Potts model</a><a class="docs-footer-nextpage" href="../genetic_code/">Genetic code »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 11 March 2026 11:06">Wednesday 11 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+[ Info: Sampling done in 0.556351542 seconds</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../pottsgraph/">« Potts model</a><a class="docs-footer-nextpage" href="../genetic_code/">Genetic code »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 12 April 2026 13:46">Sunday 12 April 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

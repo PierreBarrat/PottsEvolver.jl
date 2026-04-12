@@ -25,26 +25,26 @@ end</code></pre><h3 id="Creating-a-PottsGraph"><a class="docs-heading-anchor" hr
  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     0.0  0.0  0.0  0.0  0.0  0.0  0.0
  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     0.0  0.0  0.0  0.0  0.0  0.0  0.0
  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  …  0.0  0.0  0.0  0.0  0.0  0.0  0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; g_rand = PottsGraph(L, q, Float64; init=:rand); # random initialization</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; size(g_rand)</code><code class="nohighlight hljs ansi" style="display:block;">(L = 10, q = 21)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; g_rand.J[:, :, 1, 2] # coupling matrix between sites 1 and 2</code><code class="nohighlight hljs ansi" style="display:block;">21×21 Matrix{Float64}:
- -0.0603865  -0.06204    -0.202254    …  -0.0920158    0.0503226
- -0.0880537   0.154888   -0.0368273       0.0788336    0.200912
-  0.0364512   0.0151703   0.059547       -0.112366     0.0233217
- -0.0959824   0.0844823   0.0500079      -0.0398984    0.015367
- -0.314799   -0.0834199   0.0858495      -0.287309    -0.0437886
- -0.0635159  -0.0100393  -0.0519691   …  -0.00200401  -0.0711762
-  0.0219989   0.111479   -0.141196        0.0283503    0.0683627
-  0.143414   -0.0159089  -0.0261254       0.0441965   -0.184584
-  0.0123456  -0.118256   -0.0486653      -0.0878733   -0.0406157
- -0.117116   -0.0529542  -0.130584        0.0630611    0.163666
-  ⋮                                   ⋱                ⋮
- -0.0384241   0.0127512  -0.0372773      -0.0366409   -0.0687255
- -0.0645968  -0.153036    0.0849313      -0.039283     0.159733
- -0.0635798  -0.0799232  -0.0800636      -0.0858292   -0.0274848
- -0.171622    0.19772    -0.0999202   …   0.0293537   -0.0537473
- -0.190267    0.0126827   0.0906458       0.0712207   -0.00468208
-  0.205619    0.147886   -0.0482052       0.0669406    0.0906053
- -0.0533296   0.0544218  -0.0560534      -0.179928     0.125887
- -0.0165422  -0.0362424  -0.00131298     -0.00564719  -0.0366123
-  0.149738   -0.172874    0.0584519   …   0.121888    -0.00718466</code></pre><p>It is sometimes easier to view the couplings <code>J</code> as a square matrix. </p><pre><code class="language-julia-repl hljs">julia&gt; J_matrix = PottsEvolver.couplings_as_matrix(g_rand.J);
+ -0.0642599    0.0912449   0.248075    …  -0.0175061   -0.119706
+ -0.031527    -0.0548004  -0.0517144      -0.0803315    0.0415371
+ -0.0680207    0.13314    -0.103556       -0.00689202   0.0633406
+ -0.01413      0.042742    0.0668443      -0.00144893  -0.169834
+  0.0549948   -0.179757    0.0416005      -0.125069     0.00328016
+  0.137723     0.19237    -0.0790706   …  -0.0484401   -0.0511106
+ -0.0159524    0.0856874   0.255216       -0.0378371   -0.243035
+ -0.0263472   -0.0856735   0.00459956     -0.0125109   -0.0576693
+  0.0125806   -0.113724    0.011157        0.0540275    0.0723346
+  0.190361     0.0336571   0.0843714      -0.0165052    0.0287818
+  ⋮                                    ⋱                ⋮
+  0.0964215    0.205299    0.0338056       0.0669779    0.13858
+  0.0597691    0.164856   -0.161976       -0.0383714    0.0121927
+  0.0194922    0.022292   -0.0912408       0.150648     0.110257
+ -0.0093914   -0.100359   -0.0515561   …  -0.00267997   0.109686
+ -0.0887261   -0.117168   -0.0141199      -0.025627    -0.0799719
+  0.00918361  -0.0509933   0.054727       -0.0818937    0.147408
+  0.0620052    0.033473    0.036111       -0.0719539   -0.0437408
+  0.0788209   -0.0239166  -0.0470452      -0.0712308   -0.0442481
+  0.0377882    0.011661    0.164314    …   0.0241063   -0.142098</code></pre><p>It is sometimes easier to view the couplings <code>J</code> as a square matrix. </p><pre><code class="language-julia-repl hljs">julia&gt; J_matrix = PottsEvolver.couplings_as_matrix(g_rand.J);
 
 julia&gt; size(J_matrix) # (L*q x L*q)
 (420, 420)
@@ -58,12 +58,7 @@ julia&gt; J_tensor ≈ g_rand.J
 true</code></pre><div class="admonition is-info" id="Note-e2b6cceb06f709ea"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-e2b6cceb06f709ea" title="Permalink"></a></header><div class="admonition-body"><p>There is no check that the coupling matrix is symetric, although it should normally be the case for Potts models. </p></div></div><h2 id="Reading-and-writing-PottsGraph"><a class="docs-heading-anchor" href="#Reading-and-writing-PottsGraph">Reading and writing <code>PottsGraph</code></a><a id="Reading-and-writing-PottsGraph-1"></a><a class="docs-heading-anchor-permalink" href="#Reading-and-writing-PottsGraph" title="Permalink"></a></h2><h3 id="Reading-from-a-File"><a class="docs-heading-anchor" href="#Reading-from-a-File">Reading from a File</a><a id="Reading-from-a-File-1"></a><a class="docs-heading-anchor-permalink" href="#Reading-from-a-File" title="Permalink"></a></h3><p>The <code>read_graph</code> function reads a <code>PottsGraph</code> from a file. The file should follow the format </p><pre><code class="nohighlight hljs">J i j a b value # coupling lines
 ...
 h i a value # field lines</code></pre><p>where <code>i</code> and <code>j</code> are sequence positions and <code>a</code>, <code>b</code> are integer states (<em>e.g.</em> representing amino acids). </p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; # Read the graph in the example folder
-       g = read_graph(&quot;../../example/toy_potts.dat)</code><code class="nohighlight hljs ansi" style="display:block;">ERROR: ParseError:
-<span class="sgr90"># Error @ </span>8;;file:///home/runner/work/PottsEvolver.jl/PottsEvolver.jl/docs/REPL#2:46<span class="sgr90">REPL:2:46</span>8;;
-# Read the graph in the example folder
-g = read_graph(&quot;../../example/toy_potts.dat)
-<span class="sgr90">#                                           </span>
-<span class="sgr90">└ ── </span><span class="sgr91">unterminated string literal</span></code></pre><h3 id="Writing-to-a-File"><a class="docs-heading-anchor" href="#Writing-to-a-File">Writing to a File</a><a id="Writing-to-a-File-1"></a><a class="docs-heading-anchor-permalink" href="#Writing-to-a-File" title="Permalink"></a></h3><p>The <code>write</code> function writes the parameters of a <code>PottsGraph</code> to a file.</p><pre><code class="language-julia hljs">write(&quot;path/to/output.txt&quot;, g; sigdigits=5, index_style=1)</code></pre><h2 id="Basic-Functions"><a class="docs-heading-anchor" href="#Basic-Functions">Basic Functions</a><a id="Basic-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Functions" title="Permalink"></a></h2><h3 id="Energy-of-a-Sequence"><a class="docs-heading-anchor" href="#Energy-of-a-Sequence">Energy of a Sequence</a><a id="Energy-of-a-Sequence-1"></a><a class="docs-heading-anchor-permalink" href="#Energy-of-a-Sequence" title="Permalink"></a></h3><p>The <code>energy</code> function calculates the statistical energy of a sequence. </p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; seq = AASequence(map(aa_alphabet, collect(&quot;ACDEFGHIKLMNPQRSTVWY&quot;)))</code><code class="nohighlight hljs ansi" style="display:block;">AASequence{Int64}([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; E = energy(seq, g_rand)</code><code class="nohighlight hljs ansi" style="display:block;">ERROR: ArgumentError: Lengths of sequence and model do not match
+       g = read_graph(&quot;../../example/toy_potts.dat&quot;)</code><code class="nohighlight hljs ansi" style="display:block;">PottsGraph{Float64}: dimensions (L=3, q=2) -- β=1.0 -- nothing</code></pre><h3 id="Writing-to-a-File"><a class="docs-heading-anchor" href="#Writing-to-a-File">Writing to a File</a><a id="Writing-to-a-File-1"></a><a class="docs-heading-anchor-permalink" href="#Writing-to-a-File" title="Permalink"></a></h3><p>The <code>write</code> function writes the parameters of a <code>PottsGraph</code> to a file.</p><pre><code class="language-julia hljs">write(&quot;path/to/output.txt&quot;, g; sigdigits=5, index_style=1)</code></pre><h2 id="Basic-Functions"><a class="docs-heading-anchor" href="#Basic-Functions">Basic Functions</a><a id="Basic-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Functions" title="Permalink"></a></h2><h3 id="Energy-of-a-Sequence"><a class="docs-heading-anchor" href="#Energy-of-a-Sequence">Energy of a Sequence</a><a id="Energy-of-a-Sequence-1"></a><a class="docs-heading-anchor-permalink" href="#Energy-of-a-Sequence" title="Permalink"></a></h3><p>The <code>energy</code> function calculates the statistical energy of a sequence. </p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; seq = AASequence(map(aa_alphabet, collect(&quot;ACDEFGHIKLMNPQRSTVWY&quot;)))</code><code class="nohighlight hljs ansi" style="display:block;">AASequence{Int64}([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; E = energy(seq, g_rand)</code><code class="nohighlight hljs ansi" style="display:block;">ERROR: ArgumentError: Lengths of sequence and model do not match
 length(s) == (size(g)).L must hold. Got
 length(s) =&gt; 20
 (size(g)).L =&gt; 10</code></pre><h3 id="Gauge-Change"><a class="docs-heading-anchor" href="#Gauge-Change">Gauge Change</a><a id="Gauge-Change-1"></a><a class="docs-heading-anchor-permalink" href="#Gauge-Change" title="Permalink"></a></h3><p>The <code>set_gauge!</code> function allows you to change the gauge of the <code>PottsGraph</code>. Supported gauges include <code>:zero_sum</code> and <code>:lattice_gas</code>.</p><pre><code class="language-julia-repl hljs">julia&gt; PottsEvolver.set_gauge!(g_rand, :zero_sum);
@@ -77,4 +72,4 @@ true</code></pre><h2 id="Additional-Utilities"><a class="docs-heading-anchor" hr
 julia&gt; profile = PottsEvolver.profile_model(f1; pc=1e-2);
 
 julia&gt; all(≈(0; atol=1e-14), profile.J)
-true</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Index</a><a class="docs-footer-nextpage" href="../sampling/">Sampling »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 11 March 2026 11:06">Wednesday 11 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+true</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Index</a><a class="docs-footer-nextpage" href="../sampling/">Sampling »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 12 April 2026 13:46">Sunday 12 April 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
