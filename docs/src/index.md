@@ -23,5 +23,4 @@ _Note_: the package relies on two personal packages
 - [`BioSequenceMappings.jl`](https://github.com/PierreBarrat/BioSequenceMappings.jl) to handle sequence alignments and to convert amino acids to digits.
 
 _Remaining issues_: 
-- sampling not reproducible when picking a random seed.
 - use of `Alphabet` not clear: it's part of the `PottsGraph`, but only the default alphabets can really be used. 

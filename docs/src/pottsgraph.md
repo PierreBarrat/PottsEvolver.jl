@@ -76,7 +76,7 @@ h i a value # field lines
 where `i` and `j` are sequence positions and `a`, `b` are integer states (_e.g._ representing amino acids). 
 ```@repl pottsgraph_1
 # Read the graph in the example folder
-g = read_graph("../../example/toy_potts.dat)
+g = read_graph("../../example/toy_potts.dat")
 ```
 
 ### Writing to a File

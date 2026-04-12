@@ -154,7 +154,7 @@ will first multiply each branch in the tree by a factor `L` (length of the seque
 
 Discrete sampling is quite straightforward: the time corresponds to a discrete number of mcmc steps. 
 In continuous time however, it is customary to scale time so that the expected number of mutations per site per unit of time is 1. 
-This is done by setting the `average_substitution_rate` field of `SamplingParameters`, see [Generative continuous time model reveals epistatic signatures in protein evolution](https://doi.org/10.1101/2025.09.17.676821).
+This is done by setting the `substitution_rate` field of `SamplingParameters`, see [Generative continuous time model reveals epistatic signatures in protein evolution](https://doi.org/10.1101/2025.09.17.676821).
 This average substituion rate can be computed either by sampling the potts model or by using an existing alignment of sequences. 
 
 ```@repl sampling_1
@@ -186,7 +186,7 @@ end
 end
 ```
 
-Now, define `SamplingParameters(; sampling_type=:continuous, average_substitution_rate=Ω_1)` to have a time-normalized MCMC. 
+Now, define `SamplingParameters(; sampling_type=:continuous, substitution_rate=Ω_1)` to have a time-normalized MCMC. 
 
 ---
 

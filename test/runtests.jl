@@ -25,6 +25,10 @@ using TreeTools
         include("sampling/test.jl")
     end
 
+    @testset "Sampling continuous" begin
+        include("sampling_continuous/test.jl")
+    end
+
     @testset "Sampling on tree" begin
         include("sampling_tree/test.jl")
     end
