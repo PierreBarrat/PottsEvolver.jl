@@ -226,18 +226,18 @@ function gibbs_step!(
 
     i = rand(rng, 1:length(s))
     a_ref = s[i]
-    for a in 1:q
-        if a == a_ref
-            p[a] = 0.0
-        else
-            ΔE = g.h[a, i] - g.h[a_ref, i]
-            for j in 1:length(s)
-                if j != i
-                    ΔE += g.J[a, s[j], i, j] - g.J[a_ref, s[j], i, j]
-                end
-            end
-            p[a] = g.β * ΔE
+
+    @inbounds for a in 1:q
+        ΔE = g.h[a, i] - g.h[a_ref, i]
+        J_view = @view g.J[:, :, i, :]
+        for j in 1:length(s)
+            ΔE += J_view[a, s[j], j] - J_view[a_ref, s[j], j]
         end
+
+        # In case g.J[:, :, i, i] is not zero
+        ΔE -= J_view[a, s[i], i] - J_view[a_ref, s[i], i]
+
+        p[a] = g.β * ΔE
     end
 
     softmax!(p)

@@ -292,4 +292,27 @@ end
             @test aln_1[i] == aln_2[i]
         end
     end
+
+    @testset "parallel_chains basic functionality" begin
+        # Setup minimal test data
+        L, q, n_chains = 5, 3, 3  # Small values for fast testing
+        g = PottsGraph(L, q; init=:rand)
+        params = SamplingParameters(; Teq=5, burnin=2)  # Short MCMC runs
+        time_steps = [0, 5, 10]  # Few time points
+        inits = [NumSequence(L, q) for _ in 1:n_chains]
+
+        # Execute the function
+        result = PottsEvolver.Parallel.parallel_chains(
+            g, time_steps, inits, params; verbose=0
+        )
+
+        # Verify output structure
+        @test result isa Vector{<:Vector{<:NumSequence}}
+        @test length(result) == n_chains  # One chain per input
+
+        # Verify each chain structure
+        @test all(length(chain) == length(time_steps) for chain in result)
+        @test all(length(chain[1].seq) == L for chain in result)
+        @test all(eltype(chain) <: NumSequence for chain in result)
+    end
 end

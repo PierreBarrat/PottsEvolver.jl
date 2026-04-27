@@ -11,6 +11,7 @@ function mcmc_sample_chain(
     progress_meter=true,
     alignment_output=true,
     translate_output=false,
+    store_info=true,
 )
     # Argument checks
     @argcheck params.sampling_type == :discrete
@@ -70,9 +71,12 @@ function mcmc_sample_chain(
         # storing the result in S
         S[m + 1] = copy(conf)
         # misc.
-        push!(
-            log_info, (proposed=proposed, performed=performed, ratio=performed / proposed)
-        )
+        if store_info
+            push!(
+                log_info,
+                (proposed=proposed, performed=performed, ratio=performed / proposed),
+            )
+        end
         t_previous = t_now
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
     end
