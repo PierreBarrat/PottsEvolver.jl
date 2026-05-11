@@ -203,6 +203,19 @@ function Base.show(io::IO, x::MIME"text/plain", g::PottsGraph{T}) where {T}
 end
 
 """
+    Base.copy(g::PottsGraph)
+
+Create a deep copy of a PottsGraph. All arrays and mutable fields are copied to ensure
+independence between the original and the copy.
+"""
+function Base.copy(g::PottsGraph{T}) where {T}
+    J = convert(Array{T,4}, copy(g.J))
+    h = convert(Array{T,2}, copy(g.h))
+    alphabet = isnothing(g.alphabet) ? nothing : copy(g.alphabet)
+    return PottsGraph(J, h, g.β, alphabet)
+end
+
+"""
     context_dependent_entropy(s::AbstractSequence, g::PottsGraph)
 
 The CDE at site `i` is the entropy of the distribution defined by the local field at `i`
