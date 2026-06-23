@@ -107,7 +107,7 @@ const _reverse_code_integers = let
     rcode = Vector{Vector{IntType}}(undef, length(aa_alphabet))
     for aa in 1:length(aa_alphabet)
         codons = findall(codon_alphabet.index_to_char) do c
-            genetic_code(c) == aa_alphabet(aa)
+            return genetic_code(c) == aa_alphabet(aa)
         end
         rcode[aa] = IntType.(codons)
     end
@@ -235,7 +235,7 @@ function _build_codon_access_map()
             accessible_codons = map(nucleotides) do a
                 nts = [codon.b1, codon.b2, codon.b3]
                 nts[i] = a
-                codon_alphabet(Codon(nts...))
+                return codon_alphabet(Codon(nts...))
             end
             filter!(!isstop, accessible_codons)
             M[c, i] = (

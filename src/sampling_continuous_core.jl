@@ -299,7 +299,7 @@ function transition_rates(g::PottsGraph, step_type, S::AbstractVector{<:Abstract
     state = CTMCState(S[1])
     return map(S) do sequence
         copy!(state.seq, sequence)
-        sum(transition_rates!(state, g, step_type))
+        return sum(transition_rates!(state, g, step_type))
     end
 end
 
@@ -324,6 +324,8 @@ function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scra
         transition_rates_sqrt!(state, g)
     elseif step_type == :gibbs
         transition_rates_gibbs!(state, g)
+    elseif step_type == :mutsel
+        transition_rates_mutsel!(state, g)
     else
         throw(ArgumentError("Step type $step_type not implemented"))
     end
@@ -372,10 +374,30 @@ function transition_rates_sqrt!(state::CTMCState, g::PottsGraph)
     return state.qL_buffer
 end
 
+function transition_rates_mutsel!(state::CTMCState, g::PottsGraph)
+    # Assume that `state` has `ΔE` already computed and filtered
+    (q, L) = size(state)
+    @inbounds for i in 1:L, a in 1:q
+        if state.accessibility_mask[a, i]
+            ΔE = state.ΔE[a, i]
+            # Below: same formula, but written differently for numerical issues
+            state.qL_buffer[a, i] = if abs(ΔE) < 1e-8
+                1.0
+            else
+                ΔE / (exp(ΔE) - 1) # always positive
+            end
+        else
+            state.qL_buffer[a, i] = 0.0
+        end
+    end
+    return state.qL_buffer
+end
 function transition_rates_gibbs!(state::CTMCState{<:CodonSequence}, g::PottsGraph)
-    throw(ArgumentError("""
-        Step type `:gibbs` is not compatible with continuous sampling and codon sequences.
-            Either use an `AASequence`, another step type, or do discrete sampling."""))
+    return throw(
+        ArgumentError("""
+      Step type `:gibbs` is not compatible with continuous sampling and codon sequences.
+          Either use an `AASequence`, another step type, or do discrete sampling.""")
+    )
 end
 function transition_rates_gibbs!(state::CTMCState, g::PottsGraph)
     # This does not look like Gibbs at first
