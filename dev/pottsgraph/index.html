@@ -25,26 +25,26 @@ end</code></pre><h3 id="Creating-a-PottsGraph"><a class="docs-heading-anchor" hr
  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     0.0  0.0  0.0  0.0  0.0  0.0  0.0
  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0     0.0  0.0  0.0  0.0  0.0  0.0  0.0
  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  …  0.0  0.0  0.0  0.0  0.0  0.0  0.0</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; g_rand = PottsGraph(L, q, Float64; init=:rand); # random initialization</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; size(g_rand)</code><code class="nohighlight hljs ansi" style="display:block;">(L = 10, q = 21)</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; g_rand.J[:, :, 1, 2] # coupling matrix between sites 1 and 2</code><code class="nohighlight hljs ansi" style="display:block;">21×21 Matrix{Float64}:
- -0.194643   -0.0693591   -0.0671412  …  -0.0364865    0.0556995
- -0.0638206   0.0501112    0.0680738      0.0432094    0.128406
-  0.142507   -0.0363683    0.150072       0.0201417    0.111718
- -0.146466    0.0624663   -0.0254721      0.0106902    0.127565
-  0.0634543  -0.0118507   -0.0142391     -0.0323009    0.0339067
- -0.0253174   0.0329394   -0.0431089  …   0.00667693  -0.0319703
-  0.0148975   0.0712833    0.18308       -0.122037     0.122804
-  0.0165546  -0.152515     0.0201165     -0.141003    -0.186807
- -0.172575    0.0699405    0.0653318      0.0951035    0.00249484
-  0.0886771   0.0893693    0.120357       0.141826     0.111234
-  ⋮                                   ⋱                ⋮
-  0.0444663   0.0990262    0.181359      -0.00144604   0.0437622
- -0.096889    0.101718    -0.246295      -0.00974955  -0.00446282
- -0.107421    0.0214754   -0.0188354      0.0566682    0.284514
- -0.120251    0.00756275   0.0607161  …   0.00394589   0.0173055
- -0.0781855  -0.128414    -0.067564      -0.0620437    0.0911599
- -0.0220023   0.109129     0.108981      -0.0579723   -0.0989601
- -0.198822    0.00712898  -0.110588      -0.0777019   -0.0459777
- -0.0552363  -0.0432888   -0.0485647      0.0489895   -0.15091
- -0.0440172   0.0446378    0.0352934  …   0.201519    -0.105645</code></pre><p>It is sometimes easier to view the couplings <code>J</code> as a square matrix. </p><pre><code class="language-julia-repl hljs">julia&gt; J_matrix = PottsEvolver.couplings_as_matrix(g_rand.J);
+ -0.0675699    0.137559     0.20878    …   0.0333336    0.124949
+ -0.0739415   -0.0896891   -0.123342      -0.314432    -0.20097
+  0.151364    -0.0154462    0.15805       -0.0447051    0.0487374
+ -0.0462356    0.028086    -0.101188      -0.0946543    0.0507844
+  0.074829    -0.10049      0.046971      -0.153989    -0.0542392
+ -0.10689      0.134402     0.0592702  …  -0.0646116   -0.0135891
+ -0.044678    -0.0659022   -0.070831      -0.0237084   -0.12478
+  0.0137257   -0.192464    -0.0308517     -0.0513212   -0.0465434
+ -0.138892     0.0451377   -0.14237        0.0619894   -0.0735104
+ -0.193757     0.0981672    0.0498622      0.0374885    0.0455887
+  ⋮                                    ⋱                ⋮
+ -0.00927633  -0.0389101    0.02631       -0.111374    -0.173181
+ -0.135964     0.0125877    0.0873858     -0.0698568   -0.0319922
+ -0.090229    -0.0191067    0.0583188      0.026553     0.00892578
+  0.00239483   0.0651251   -0.126878   …   0.0822241   -0.188061
+ -0.0575429   -0.0438282    0.126904       0.119254     0.0302765
+ -0.0940725    0.0400643   -0.135139       0.0209095    0.0577102
+ -0.0909355    0.0542609    0.143318       0.15256     -0.0763658
+ -0.115246    -0.0314892   -0.201456      -0.00859883   0.0549583
+  0.0694329    0.00342575   0.0738507  …  -0.0890476   -0.0281369</code></pre><p>It is sometimes easier to view the couplings <code>J</code> as a square matrix. </p><pre><code class="language-julia-repl hljs">julia&gt; J_matrix = PottsEvolver.couplings_as_matrix(g_rand.J);
 
 julia&gt; size(J_matrix) # (L*q x L*q)
 (420, 420)
@@ -72,4 +72,4 @@ true</code></pre><h2 id="Additional-Utilities"><a class="docs-heading-anchor" hr
 julia&gt; profile = PottsEvolver.profile_model(f1; pc=1e-2);
 
 julia&gt; all(≈(0; atol=1e-14), profile.J)
-true</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Index</a><a class="docs-footer-nextpage" href="../sampling/">Sampling »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 17 June 2026 10:45">Wednesday 17 June 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+true</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Index</a><a class="docs-footer-nextpage" href="../sampling/">Sampling »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Tuesday 23 June 2026 12:28">Tuesday 23 June 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
