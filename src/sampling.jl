@@ -212,14 +212,14 @@ The graph `g` is only used to determine the length of the sequence, and the alph
 function get_init_sequence(s0::Symbol, g::PottsGraph; rng=Random.default_rng(), kwargs...)
     (; L, q) = size(g)
     return if s0 == :random_codon
-        @argcheck q == length(aa_alphabet) """
-            For sampling from `CodonSequence`, graph alphabet size must be $(length(aa_alphabet)).
+        @argcheck q == Q_AA """
+            For sampling from `CodonSequence`, graph alphabet size must be $(Q_AA).
             Instead $q.
             """
         CodonSequence(rng, L)
     elseif s0 == :random_aa
-        @argcheck q == length(aa_alphabet) """
-            For sampling from `AASequence`, graph alphabet size must be $(length(aa_alphabet)).
+        @argcheck q == Q_AA """
+            For sampling from `AASequence`, graph alphabet size must be $(Q_AA).
             Instead $q.
             """
         AASequence(rng, L)
@@ -235,7 +235,7 @@ get_init_sequence(s0::AbstractSequence, g; kwargs...) = copy(s0)
 function get_init_sequence(
     s0::AbstractVector{<:Integer}, g; rng=Random.default_rng(), kwargs...
 )
-    return if size(g).q == length(aa_alphabet)
+    return if size(g).q == Q_AA
         if maximum(s0) <= 21
             AASequence(s0)
         elseif 21 < maximum(s0) <= 65

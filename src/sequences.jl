@@ -37,7 +37,7 @@ Wrapper around a vector of integers, with implied alphabet `PottsEvolver.aa_alph
 mutable struct AASequence{T<:Integer} <: AbstractSequence
     seq::Vector{T}
     function AASequence(x::AbstractVector{T}) where {T}
-        q = length(aa_alphabet)
+        q = Q_AA
         @argcheck all(<=(q), x) "AA are represented by `(1..$(q))` integers. Instead, $x"
         return new{T}(x)
     end
@@ -57,7 +57,7 @@ end
 Return a random `AASequence{T}` of length `L`.
 """
 function AASequence(rng::AbstractRNG, L::Integer; T=IntType)
-    return AASequence(rand(rng, T(1):T(length(aa_alphabet)), L))
+    return AASequence(rand(rng, T(1):T(Q_AA), L))
 end
 """
     AASequence(s::AbstractString)
@@ -87,8 +87,8 @@ mutable struct CodonSequence{T<:Integer} <: AbstractSequence
     seq::Vector{T} # the codons
     aaseq::Vector{T} # the translation
     function CodonSequence(seq::Vector{T}, aaseq::Vector{T}) where {T}
-        qc = length(codon_alphabet)
-        qaa = length(aa_alphabet)
+        qc = Q_CODON
+        qaa = Q_AA
         @argcheck all(<=(qc), seq) """
             Codons are represented by `(1..$(qc))` integers. Instead $seq
         """
@@ -141,7 +141,7 @@ Underlying integer type is `T`.
 function CodonSequence(rng::AbstractRNG, L::Int; source=:aa, T=IntType)
     # Base function
     return if source == :aa
-        CodonSequence(rand(rng, T(1):T(length(aa_alphabet)), L); source, rng)
+        CodonSequence(rand(rng, T(1):T(Q_AA), L); source, rng)
     elseif source == :codon
         codons = T.(rand(rng, coding_codons, L))
         CodonSequence(codons; source=:codon, rng) # rng useless in this case

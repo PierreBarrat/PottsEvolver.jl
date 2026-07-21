@@ -1,11 +1,10 @@
 name = "PottsEvolver"
 uuid = "288ebb56-9d8a-405a-a2d6-6ed6f22c6052"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Pierre Barrat-Charlaix"]
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
-BioSequenceMappings = "a84bc454-70cc-4f51-8a9d-ca76a5a82222"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 LoggingExtras = "e6f89c97-d47a-5376-807f-9c37f3926c36"
@@ -21,7 +20,6 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 Accessors = "0.1"
 Aqua = "0.8"
 ArgCheck = "2.3.0"
-BioSequenceMappings = "0.1.6"
 Distributions = "0.25.117"
 Logging = "1.10.0"
 LoggingExtras = "1.1.0"

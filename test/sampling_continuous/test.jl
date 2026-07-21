@@ -21,7 +21,7 @@
     end
 
     @testset "Codon sequences" begin
-        q = length(codon_alphabet)
+        q = PottsEvolver.Q_CODON
         g = PottsGraph(L, q; init=:rand)
 
         a = CodonSequence(L)

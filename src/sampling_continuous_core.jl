@@ -36,7 +36,7 @@ end
 end
 
 function CTMCState(sequence::CodonSequence)
-    q = length(codon_alphabet)
+    q = Q_CODON
     L = length(sequence)
     return CTMCState{CodonSequence}(sequence, q, L)
 end
@@ -585,7 +585,7 @@ function compute_energy_differences(refseq::NumSequence{T,q}, g::PottsGraph) whe
     return compute_energy_differences!(ΔE, refseq, g)
 end
 function compute_energy_differences(refseq::CodonSequence, g::PottsGraph)
-    q = length(codon_alphabet)
+    q = Q_CODON
     L = length(refseq)
     ΔE = zeros(Float64, q, L)
     return compute_energy_differences!(ΔE, refseq, g)

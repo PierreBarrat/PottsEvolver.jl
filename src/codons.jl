@@ -4,23 +4,39 @@
 
 const nucleotides = ['A', 'C', 'G', 'T']
 const _nucleotides_gap = ['A', 'C', 'G', 'T', '-']
-"""
-    aa_alphabet
-    nt_alphabet
-    codon_alphabet
 
-Default alphabets for `PottsEvolver`.
+#=
+`aa_alphabet` and `codon_alphabet` are *functions*, not objects: they map a symbol to its
+index and an index back to its symbol, dispatching on the type of their argument.
+Both mappings are fixed, so there is nothing to configure and nothing to carry around.
+Use `symbols(alphabet)` for the vector of symbols and `Q_AA`/`Q_CODON` for their number.
+=#
+
+const AA_SYMBOLS = collect("-ACDEFGHIKLMNPQRSTVWY")
+const AA_INDEX = Dict{Char,IntType}(c => i for (i, c) in enumerate(AA_SYMBOLS))
 """
-const aa_alphabet = Alphabet(Alphabet(:aa).characters, IntType; default_char=nothing)
+    Q_AA
+
+Number of amino acid symbols: the 20 amino acids and the gap.
+"""
+const Q_AA = IntType(length(AA_SYMBOLS))
 
 """
-    aa_alphabet
-    nt_alphabet
-    codon_alphabet
+    aa_alphabet(c::AbstractChar) -> Integer
+    aa_alphabet(i::Integer) -> Char
 
-Default alphabets for `PottsEvolver`.
+Map an amino acid symbol to its index, or an index back to its symbol.
 """
-const nt_alphabet = Alphabet(nucleotides, IntType)
+function aa_alphabet(c::AbstractChar)
+    i = get(AA_INDEX, c, nothing)
+    isnothing(i) && throw(
+        ArgumentError(
+            "'$c' is not an amino acid symbol - expected one of \"$(prod(AA_SYMBOLS))\""
+        ),
+    )
+    return i
+end
+aa_alphabet(i::Integer) = AA_SYMBOLS[i]
 
 @kwdef struct Codon
     b1::Char
@@ -43,19 +59,40 @@ Return iterator on the bases of `codon`.
 """
 bases(codon::Codon) = Iterators.map(i -> getfield(codon, i), 1:3)
 
-"""
-    aa_alphabet
-    nt_alphabet
-    codon_alphabet
-
-Default alphabets for `PottsEvolver`.
-"""
-const codon_alphabet = let
+const CODON_SYMBOLS = let
     nt = nucleotides
     C = vec(map(x -> Codon(x...), Iterators.product(nt, nt, nt))) # AAA CAA GAAA etc... (first changes fastest)
-    pushfirst!(C, Codon('-', '-', '-'))
-    Alphabet(C, IntType)
+    pushfirst!(C, Codon('-', '-', '-')) # the gap codon therefore has index 1
+    C
 end
+const CODON_INDEX = Dict{Codon,IntType}(c => i for (i, c) in enumerate(CODON_SYMBOLS))
+"""
+    Q_CODON
+
+Number of codon symbols: the 64 nucleotide triplets and the gap codon.
+"""
+const Q_CODON = IntType(length(CODON_SYMBOLS))
+
+"""
+    codon_alphabet(c::Codon) -> Integer
+    codon_alphabet(i::Integer) -> Codon
+
+Map a codon to its index, or an index back to its codon.
+"""
+function codon_alphabet(c::Codon)
+    i = get(CODON_INDEX, c, nothing)
+    isnothing(i) && throw(ArgumentError("$c is not in the codon alphabet"))
+    return i
+end
+codon_alphabet(i::Integer) = CODON_SYMBOLS[i]
+
+"""
+    symbols(alphabet)
+
+Return the vector of symbols used by `aa_alphabet` or `codon_alphabet`.
+"""
+symbols(::typeof(aa_alphabet)) = AA_SYMBOLS
+symbols(::typeof(codon_alphabet)) = CODON_SYMBOLS
 
 #==========================================#
 ############### Genetic code ###############
@@ -104,12 +141,11 @@ Translate `c` and return the amino acid as a `Char`.
 genetic_code(codon::Codon) = _genetic_code_struct[codon]
 
 const _reverse_code_integers = let
-    rcode = Vector{Vector{IntType}}(undef, length(aa_alphabet))
-    for aa in 1:length(aa_alphabet)
-        codons = findall(codon_alphabet.index_to_char) do c
-            return genetic_code(c) == aa_alphabet(aa)
-        end
-        rcode[aa] = IntType.(codons)
+    rcode = Vector{Vector{IntType}}(undef, Q_AA)
+    for aa in 1:Q_AA
+        rcode[aa] = IntType[
+            i for (i, c) in enumerate(CODON_SYMBOLS) if genetic_code(c) == aa_alphabet(aa)
+        ]
     end
     rcode
 end
@@ -189,15 +225,11 @@ isstop(i::Integer) = in(i, stop_codon_indices)
 
 # isgap should also work on amino acids : pass alphabet
 const gap_codon_index = IntType(findfirst(isgap, symbols(codon_alphabet)))
-isgap(i::Integer, alphabet::Alphabet) = isgap(alphabet(i))
+isgap_codon(i::Integer) = (i == gap_codon_index)
 isgap(c::AbstractChar) = (c == '-')
 
-iscoding(c::Integer) = !isgap(c, codon_alphabet) && !isstop(c)
-const coding_codons = IntType.(findall(iscoding, 1:length(codon_alphabet)))
-
-function to_string(s::AbstractVector{<:Integer}, alphabet::Alphabet{Codon,<:Integer})
-    return prod(x -> prod(bases(alphabet(x))), s)
-end
+iscoding(c::Integer) = !isgap_codon(c) && !isstop(c)
+const coding_codons = IntType.(findall(iscoding, 1:Q_CODON))
 
 # Number of non-stop / non-gaps codons
 const n_aa_codons = count(c -> !isgap(c) && !isstop(c), symbols(codon_alphabet))
@@ -219,7 +251,7 @@ what other codons are accessible by one mutation?
 
 function _build_codon_access_map()
     M = Dict{Tuple{IntType,IntType},Tuple{ReadOnlyVector{IntType},ReadOnlyVector{IntType}}}()
-    for c in 1:length(codon_alphabet), i in 1:3
+    for c in 1:Q_CODON, i in 1:3
         codon = codon_alphabet(c)
         if !isgap(codon) && isvalid(codon)
             accessible_codons = map(nucleotides) do a
@@ -247,13 +279,13 @@ Similar to the above, with the following differences.
 function _build_codon_access_map_2()
     M = Dict{IntType,Tuple{ReadOnlyVector{IntType},ReadOnlyVector{IntType}}}()
 
-    for c in 1:length(codon_alphabet)
+    for c in 1:Q_CODON
         codon = codon_alphabet(c)
         isstop(codon) && continue
 
         # Gap case first
         if isgap(codon)
-            accessible_codons = collect(1:length(codon_alphabet))
+            accessible_codons = collect(1:Q_CODON)
             filter!(c -> iscoding(codon_alphabet(c)), accessible_codons) # remove all non-coding (i.e. gap and stop)
             M[c] = (
                 ReadOnlyArray(accessible_codons),
@@ -349,6 +381,6 @@ end
 #===========================================================================#
 
 const _aa_degeneracy = Dict{IntType,FloatType}(
-    a => log(length(reverse_code(a))) for a in 1:length(aa_alphabet)
+    a => log(length(reverse_code(a))) for a in 1:Q_AA
 )
 aa_degeneracy(a::Integer) = get(_aa_degeneracy, a, -Inf)
