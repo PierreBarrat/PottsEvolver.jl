@@ -150,7 +150,7 @@ end
     params = SamplingParameters(; step_meaning=:changed, Teq=0)
 
     # Test for 'raw' sequence output
-    data_pertree = mcmc_sample(g, tree, M, params; init=:random_aa, alignment_output=false)
+    data_pertree = mcmc_sample(g, tree, M, params; init=:random_aa, pack_output=false)
     data_pernode = PottsEvolver.pernode_alignment(data_pertree)
     for nlabel in map(label, nodes(tree)), m in 1:M
         # m represents the tree, *i.e.* the sampling realization
@@ -161,17 +161,15 @@ end
         end
     end
 
-    # for alignment output
-    data_pertree = mcmc_sample(
-        g, tree, M, params; init=:random_codon, alignment_output=true
-    )
+    # for packed (SequenceSample) output
+    data_pertree = mcmc_sample(g, tree, M, params; init=:random_codon, pack_output=true)
     data_pernode = PottsEvolver.pernode_alignment(data_pertree)
     for nlabel in map(label, nodes(tree)), m in 1:M
         # m represents the tree, *i.e.* the sampling realization
         seq_left = if isleaf(tree[nlabel])
-            find_sequence(nlabel, data_pertree[m].leaf_sequences)[2]
+            data_pertree[m].leaf_sequences[nlabel]
         else
-            find_sequence(nlabel, data_pertree[m].internal_sequences)[2]
+            data_pertree[m].internal_sequences[nlabel]
         end
         @test seq_left == data_pernode.sequences[nlabel][m]
     end

@@ -37,6 +37,12 @@ include("sequences.jl")
 export AbstractSequence, AASequence, CodonSequence, NumSequence
 
 include("misc.jl")
+
+include("sample_output.jl")
+export SequenceSample
+#! format: off
+# public sequence_type
+#! format: on
 #! format: off
 # public translate
 #! format: on

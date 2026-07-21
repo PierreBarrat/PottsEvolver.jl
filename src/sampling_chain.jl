@@ -9,7 +9,7 @@ function mcmc_sample_chain(
     params::SamplingParameters;
     rng=Random.default_rng(),
     progress_meter=true,
-    alignment_output=true,
+    pack_output=true,
     translate_output=false,
     store_info=true,
 )
@@ -20,7 +20,7 @@ function mcmc_sample_chain(
     @argcheck issorted(time_steps) && all(>=(0), time_steps) """
     Time steps must be positive and sorted in ascending order. Instead $time_steps
     """
-    if !alignment_output && translate_output
+    if !pack_output && translate_output
         error("I have to implement this case")
     end
 
@@ -81,7 +81,7 @@ function mcmc_sample_chain(
     end
     @info "Sampling done in $time seconds"
 
-    sequences = fmt_output(S, alignment_output, translate_output; names=time_steps)
+    sequences = fmt_output(S, pack_output, translate_output; names=time_steps)
     return (;
         sequences,
         tvals=collect(time_steps),
@@ -101,7 +101,7 @@ function mcmc_sample_continuous_chain(
     params::SamplingParameters;
     rng=Random.default_rng(),
     progress_meter=true,
-    alignment_output=true,
+    pack_output=true,
     translate_output=false,
 )
     # Argument checks
@@ -111,7 +111,7 @@ function mcmc_sample_continuous_chain(
     @argcheck issorted(time_steps) && all(>=(0), time_steps) """
     Time steps must be positive and sorted in ascending order. Instead $time_steps
     """
-    if !alignment_output && translate_output
+    if !pack_output && translate_output
         error("I have to implement this case")
     end
 
@@ -191,7 +191,7 @@ function mcmc_sample_continuous_chain(
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
     end
     @info "Sampling done in $time seconds"
-    sequences = fmt_output(S, alignment_output, translate_output; names=time_steps)
+    sequences = fmt_output(S, pack_output, translate_output; names=time_steps)
     return (;
         sequences,
         tvals=collect(time_steps),
@@ -205,24 +205,25 @@ end
 #=====================#
 
 function fmt_output(
-    sequences::AbstractVector{T}, alignment, translate; names=nothing, dict=false
+    sequences::AbstractVector{T}, pack, translate; names=nothing, dict=false
 ) where {T<:CodonSequence}
-    return if alignment
-        A = Alignment(sequences; names)
-        translate ? genetic_code(A) : A
+    return if pack
+        # `as_codons=false` stores the translation directly, and tags the sample as
+        # holding amino acids
+        SequenceSample(sequences; labels=names, as_codons=!translate)
     elseif dict
-        Dict{String,T}(name => seq for (name, seq) in zip(names, sequences))
+        Dict{String,T}(string(name) => seq for (name, seq) in zip(names, sequences))
     else
         sequences
     end
 end
 function fmt_output(
-    sequences::AbstractVector{T}, alignment, translate; names=nothing, dict=false
+    sequences::AbstractVector{T}, pack, translate; names=nothing, dict=false
 ) where {T<:AbstractSequence}
-    return if alignment
-        Alignment(sequences; names)
+    return if pack
+        SequenceSample(sequences; labels=names)
     elseif dict
-        Dict{String,T}(name => seq for (name, seq) in zip(names, sequences))
+        Dict{String,T}(string(name) => seq for (name, seq) in zip(names, sequences))
     else
         sequences
     end

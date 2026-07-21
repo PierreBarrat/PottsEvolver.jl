@@ -16,16 +16,12 @@ Base.iterate(s::AbstractSequence, state) = iterate(sequence(s), state)
 Base.length(s::AbstractSequence) = length(sequence(s))
 Base.eltype(s::AbstractSequence) = eltype(sequence(s))
 
-# used in Alignment
-_sequence_alphabet(::Type{<:AbstractSequence}; kwargs...) = nothing
-
 #=
 Methods that a subtype should implement
 - sequence: access integer vector (necessary if field is not called `seq`)
 - copy !NECESSARY!
 - equality and hash
 - indexing
-- _sequence_alphabet: return default alphabet for the type
 =#
 
 #====================================#
@@ -82,8 +78,6 @@ end
 AASequence(L::Integer; T=IntType) = AASequence(Random.default_rng(), L; T)
 AASequence{T}(rng::AbstractRNG, L::Integer) where {T<:Integer} = AASequence(rng, L; T)
 AASequence{T}(L::Integer) where {T<:Integer} = AASequence(L; T)
-
-_sequence_alphabet(::Type{<:AASequence}; kwargs...) = aa_alphabet
 
 #=============================================#
 ################ CodonSequence ################
@@ -207,10 +201,6 @@ function sequence(x::CodonSequence; as_codons=true)
     return as_codons ? x.seq : x.aaseq
 end
 
-function _sequence_alphabet(::Type{<:CodonSequence}; as_codons=true)
-    return as_codons ? codon_alphabet : aa_alphabet
-end
-
 #============================================================#
 ##################### Numerical sequence #####################
 #============================================================#
@@ -315,52 +305,6 @@ function Base.string(::NumSequence)
         Use `AASequence` or `CodonSequence`, or access the integers with `sequence(s)`.
         """),
     )
-end
-
-#===========================================================================#
-########################## Converting to Alignment ##########################
-#===========================================================================#
-
-"""
-    Alignment(sequences; alphabet, names, as_codons=true)
-
-Construct a `BioSequenceMappings.Alignment` from a set of sequences.
-If the sequences are `AASequence`, `alphabet` defaults to `aa_alphabet`.
-If they are `CodonSequence`, `as_codons` can be used to decide whether the
-alignment should store codons or amino acids. `alphabet` can be determined automatically
-from this.
-"""
-function Alignment(
-    S::AbstractVector{T};
-    names=nothing,
-    as_codons=true,
-    alphabet=_sequence_alphabet(T; as_codons),
-) where {T<:AbstractSequence}
-    if !allequal(Iterators.map(length, S))
-        error("Sequences do not have the same length")
-    end
-    if !isnothing(names) && length(names) != length(S)
-        error("Got $(length(names)) names but $(length(S)) sequences.")
-    end
-
-    data = hcat([sequence(s; as_codons) for s in S]...)
-
-    return Alignment(data, alphabet; names)
-end
-
-function genetic_code(A::Alignment, alphabet=aa_alphabet)
-    if A.alphabet != codon_alphabet
-        error("""
-            Function should be called on alignment of codon sequences.
-            Instead `A.alphabet`: $(A.alphabet)
-        """)
-    end
-    S = map(x -> genetic_code.(x), A) # this translates to default aa_alphabet
-    if alphabet != aa_alphabet
-        # translate to requested alphabet if needed
-        S = map(x -> BioSequenceMappings.translate(x, aa_alphabet, alphabet))
-    end
-    return Alignment(S, alphabet; A.names, A.weights)
 end
 
 #==================#

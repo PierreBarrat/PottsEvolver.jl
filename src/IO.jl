@@ -34,6 +34,20 @@ function write_fasta(
     return nothing
 end
 
+"""
+    write_fasta(file, sample::SequenceSample; labels=sample.labels, kwargs...)
+
+Write a sample obtained from `mcmc_sample` to `file` in fasta format.
+Labels default to those carried by the sample: sampling times for a chain, node labels for
+a tree.
+"""
+function write_fasta(
+    file::AbstractString, sample::SequenceSample; labels=sample.labels, kwargs...
+)
+    sequences = map(m -> _sequence_from_column(sample, sample[m]), 1:length(sample))
+    return write_fasta(file, sequences; labels, kwargs...)
+end
+
 #============================================================#
 ##################### Reading PottsGraph #####################
 #============================================================#

@@ -5,7 +5,7 @@
 """
     mcmc_sample(
         g::PottsGraph, M::Integer, s0::AbstractSequence, params::SamplingParameters;
-        rng=Random.GLOBAL_RNG, verbose=0, progress_meter=true, alignment_output=true,
+        rng=Random.GLOBAL_RNG, verbose=0, progress_meter=true, pack_output=true,
     )
     mcmc_sample(
         g::PottsGraph, M::Integer, params::SamplingParameters; init=:random_num, kwargs...)
@@ -14,7 +14,7 @@
 
 First form: sample `g` for `M` steps starting from sequence `s0`, using parameters in `params`.
 Return value: named tuple with fields
-- `sequences`: alignment (or vector) of sequences
+- `sequences`: a [`SequenceSample`](@ref), or a vector of sequences if `pack_output=false`
 - `tvals`: vector with the number of steps at each sample
 - `info`: information about the run
 - `params`: parameters of the run.
@@ -102,7 +102,7 @@ end
 #=================================================================================#
 
 """
-    mcmc_sample(g, tree, M=1, params; alignment_output, translate_output, init, kwargs...)
+    mcmc_sample(g, tree, M=1, params; pack_output, translate_output, init, kwargs...)
 
 Sample `g` along branches of `tree`.
 Repeat the process `M` times, returning an array of named tuples of the form
@@ -113,9 +113,9 @@ Sequences in `leaf_sequences` and `internal_sequences` are sorted in post-order 
 The sequence to be used as the root should be provided using the `init` kwarg,
   see `?PottsEvolver.get_init_sequence`.
 
-If `alignment_output`, the sequences will be wrapped into an `Alignment` structure.
+If `pack_output`, the sequences will be wrapped into a [`SequenceSample`](@ref).
 Otherwise, they are in a dictionary indexed by node label.
-If `translate_output` and if the root sequence was a `CodonSequence`, the output alignment
+If `translate_output` and if the root sequence was a `CodonSequence`, the output sample
 will contain the amino acid sequence and not the codons.
 
 ## Warning
@@ -131,7 +131,7 @@ function mcmc_sample(
     verbose=0,
     logfile=nothing,
     logfile_verbose=1,
-    alignment_output=true,
+    pack_output=true,
     translate_output=true,
     kwargs..., # init=get_init_sequence(...) here: passed to mcmc_sample_tree
 )    # one sequence per node --> two alignments as output (+ tree)
@@ -159,14 +159,14 @@ function mcmc_sample(
             tree=sampled_tree,
             leaf_sequences=fmt_output(
                 leaf_sequences,
-                alignment_output,
+                pack_output,
                 translate_output;
                 names=leaf_names,
                 dict=true,
             ),
             internal_sequences=fmt_output(
                 internal_sequences,
-                alignment_output,
+                pack_output,
                 translate_output;
                 names=internal_names,
                 dict=true,

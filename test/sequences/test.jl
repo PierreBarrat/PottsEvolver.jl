@@ -117,27 +117,51 @@ end
     @test_throws ArgumentError NumSequence([0, 1, 2], 21)
 end
 
-@testset "Sequences to alignent" begin
+@testset "Sequences to SequenceSample" begin
     M, L, q = (3, 10, 5)
     numseqs = [NumSequence(L, q; T=Int32) for _ in 1:M]
     aaseqs = [AASequence(L) for _ in 1:M] # default integer type should be IntType
     codonseqs = [CodonSequence(L) for _ in 1:M]
 
-    A = Alignment(numseqs)
-    @test A isa Alignment{Nothing,Int32}
-    @test isnothing(A.alphabet)
+    A = SequenceSample(numseqs)
+    # note: `NumSequence` converts `q` to `T`, so the type parameter is `Int32(q)` and not
+    # `q::Int64` -- the two print identically but are different type parameters
+    @test A isa SequenceSample{NumSequence{Int32,Int32(q)},Int32}
+    @test size(A) == (L, M)
+    @test length(A) == M
 
-    A = Alignment(aaseqs)
-    @test A isa Alignment{Char,PottsEvolver.IntType}
-    @test A.alphabet == aa_alphabet
+    A = SequenceSample(aaseqs)
+    @test A isa SequenceSample{AASequence{PottsEvolver.IntType},PottsEvolver.IntType}
 
-    A = Alignment(codonseqs; as_codons=true)
-    @test A isa Alignment{PottsEvolver.Codon,PottsEvolver.IntType}
-    @test A.alphabet == codon_alphabet
+    A = SequenceSample(codonseqs; as_codons=true)
+    @test A isa SequenceSample{CodonSequence{PottsEvolver.IntType},PottsEvolver.IntType}
+    @test A[1] == codonseqs[1].seq
 
-    A = Alignment(codonseqs; as_codons=false)
-    @test A isa Alignment{Char,PottsEvolver.IntType}
-    @test A.alphabet == aa_alphabet
+    # storing the translation tags the sample as amino acids
+    A = SequenceSample(codonseqs; as_codons=false)
+    @test A isa SequenceSample{AASequence{PottsEvolver.IntType},PottsEvolver.IntType}
+    @test A[1] == codonseqs[1].aaseq
+
+    @testset "Labels and indexing" begin
+        A = SequenceSample(aaseqs; labels=["a", "b", "c"])
+        @test A.labels == ["a", "b", "c"]
+        @test A["b"] == A[2] == aaseqs[2].seq
+        @test_throws KeyError A["nope"]
+        @test collect(A) == map(s -> s.seq, aaseqs) # iterates over sequences
+
+        # labels default to the sequence index
+        @test SequenceSample(aaseqs).labels == ["1", "2", "3"]
+        @test_throws ArgumentError SequenceSample(aaseqs; labels=["a", "b"])
+        @test_throws ArgumentError SequenceSample([AASequence(3), AASequence(4)])
+    end
+
+    @testset "Translating a sample" begin
+        A = SequenceSample(codonseqs)
+        B = PottsEvolver.translate(A)
+        @test B isa SequenceSample{AASequence{PottsEvolver.IntType},PottsEvolver.IntType}
+        @test B.data == SequenceSample(codonseqs; as_codons=false).data
+        @test B.labels == A.labels
+    end
 end
 
 @testset "Reproducibility" begin

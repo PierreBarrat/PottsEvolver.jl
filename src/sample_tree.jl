@@ -299,21 +299,26 @@ function _pernode_alignment(data::Vector{Dict{String,T}}) where {T<:AbstractSequ
     return out
 end
 
-function _pernode_alignment(data::Vector{T}) where {T<:Alignment}
-    @argcheck allequal(A -> A.alphabet, data)
-    alphabet = first(data).alphabet
-    labels = first(data).names
-    L, N_nodes = size(first(data))
+function _pernode_alignment(data::Vector{S}) where {S<:SequenceSample}
+    @argcheck allequal(X -> sort(X.labels), data) """
+        All samples must cover the same set of node labels
+        """
+    labels = first(data).labels
+    L, _ = size(first(data))
     M = length(data) # number of trees
+    T = eltype(first(data).data)
 
-    out = Dict{String,T}()
-    for (i, label) in enumerate(labels)
+    # one label -> column lookup per sample, instead of a linear scan per (node, tree)
+    columns = map(X -> Dict(l => i for (i, l) in enumerate(X.labels)), data)
+
+    out = Dict{String,S}()
+    for label in labels
         # construct data matrix for this node
-        D = zeros(Int, L, M)
+        D = Matrix{T}(undef, L, M)
         for m in 1:M
-            D[:, m] .= find_sequence(label, data[m])[2] # data[m] is an Alignment
+            D[:, m] .= view(data[m].data, :, columns[m][label])
         end
-        out[label] = T(; data=D, alphabet, names=1:M)
+        out[label] = S(D, string.(1:M))
     end
     return out
 end

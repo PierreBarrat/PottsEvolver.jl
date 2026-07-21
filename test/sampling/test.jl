@@ -65,30 +65,30 @@ end
 
     ## Num sequence
     # because asked explicitely
-    S, _ = mcmc_sample(g, M, params; init=:random_num, alignment_output=false)
+    S, _ = mcmc_sample(g, M, params; init=:random_num, pack_output=false)
     @test S isa AbstractVector{<:PottsEvolver.NumSequence}
 
     # because g is not an amino acid model (q != 21)
     g_num = PottsGraph(L, 5; init=:rand)
-    S, _ = mcmc_sample(g_num, M, params; init=[1, 2, 3, 4], alignment_output=false)
+    S, _ = mcmc_sample(g_num, M, params; init=[1, 2, 3, 4], pack_output=false)
     @test S isa AbstractVector{<:PottsEvolver.NumSequence}
 
     ## AA sequence
     # because asked explicitely
-    S, _ = mcmc_sample(g, M, params; init=:random_aa, alignment_output=false)
+    S, _ = mcmc_sample(g, M, params; init=:random_aa, pack_output=false)
     @test S isa AbstractVector{<:PottsEvolver.AASequence}
 
     # because g has q=21 and init vector has elements <= 21
-    S, _ = mcmc_sample(g, M, params; init=[1, 2, 3, 21], alignment_output=false)
+    S, _ = mcmc_sample(g, M, params; init=[1, 2, 3, 21], pack_output=false)
     @test S isa AbstractVector{<:PottsEvolver.AASequence}
 
     ## Codon sequence
     # because asked explicitely
-    S, _ = mcmc_sample(g, M, params; init=:random_codon, alignment_output=false)
+    S, _ = mcmc_sample(g, M, params; init=:random_codon, pack_output=false)
     @test S isa AbstractVector{<:PottsEvolver.CodonSequence}
 
     # because g has q=21 and init vector has elements > 21
-    S, _ = mcmc_sample(g, M, params; init=[1, 2, 3, 22], alignment_output=false)
+    S, _ = mcmc_sample(g, M, params; init=[1, 2, 3, 22], pack_output=false)
     @test S isa AbstractVector{<:PottsEvolver.CodonSequence}
 end
 
@@ -98,7 +98,7 @@ end
 
     # Test discrete case - Integer Teq and :discrete sampling_type
     params_discrete = SamplingParameters(; Teq=Int(5), sampling_type=:discrete)
-    S_discrete = mcmc_sample(g, M, params_discrete; alignment_output=false).sequences
+    S_discrete = mcmc_sample(g, M, params_discrete; pack_output=false).sequences
     @test S_discrete isa AbstractVector{<:PottsEvolver.NumSequence}
 
     # Test continuous case - Float Teq and :continuous sampling_type
@@ -107,7 +107,7 @@ end
     )
     S_continuous =
         mcmc_sample(
-            g, M, params_continuous; alignment_output=false, init=:random_aa
+            g, M, params_continuous; pack_output=false, init=:random_aa
         ).sequences
     @test S_continuous isa AbstractVector{<:PottsEvolver.AASequence}
     #= NEED TO CHECK TESTS BELOW  =#
@@ -118,14 +118,14 @@ end
     )
     S_mixed1 =
         mcmc_sample(
-            g, M, params_mixed1; alignment_output=false, init=:random_codon
+            g, M, params_mixed1; pack_output=false, init=:random_codon
         ).sequences
     @test S_mixed1 isa AbstractVector{<:PottsEvolver.CodonSequence}
 
     # Test mixed case 2 - Float Teq (convertible to Int) and :discrete sampling_type
     # Should work by converting to Int
     params_mixed2 = SamplingParameters(; Teq=5.0, sampling_type=:discrete)
-    S_mixed2, _ = mcmc_sample(g, M, params_mixed2; alignment_output=false, init=:random_num)
+    S_mixed2, _ = mcmc_sample(g, M, params_mixed2; pack_output=false, init=:random_num)
     @test S_mixed2 isa AbstractVector{<:PottsEvolver.NumSequence}
 end
 

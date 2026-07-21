@@ -2,7 +2,7 @@ using Test
 using PottsEvolver
 
 using Accessors
-using BioSequenceMappings: find_sequence # PottsEvolver now owns `hamming`; avoid the clash
+using BioSequenceMappings: Alignment # still re-exported; removed in a later commit
 using Logging
 using Random
 using StatsBase

@@ -260,7 +260,7 @@ function average_transition_rate(
     end
 
     sample_eq = mcmc_sample(
-        g, n_samples, params; alignment_output=false, init=s0, rng, progress_meter
+        g, n_samples, params; pack_output=false, init=s0, rng, progress_meter
     )
     sample_eq = sample_eq.sequences
     return average_transition_rate(g, step_type, sample_eq)
