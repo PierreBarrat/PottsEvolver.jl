@@ -20,7 +20,6 @@ function mcmc_sample_chain(
     @argcheck issorted(time_steps) && all(>=(0), time_steps) """
     Time steps must be positive and sorted in ascending order. Instead $time_steps
     """
-    tmp_check_alphabet_consistency(g, s0)
     if !alignment_output && translate_output
         error("I have to implement this case")
     end
@@ -112,7 +111,6 @@ function mcmc_sample_continuous_chain(
     @argcheck issorted(time_steps) && all(>=(0), time_steps) """
     Time steps must be positive and sorted in ascending order. Instead $time_steps
     """
-    tmp_check_alphabet_consistency(g, s0)
     if !alignment_output && translate_output
         error("I have to implement this case")
     end

@@ -204,7 +204,8 @@ Try to guess a reasonable init sequence from `s0`:
 - if `s0::Symbol`, then it should be among `[:random_codon, :random_aa, :random_num]`;
   a random sequence of the corresponding type is created, using the length of `g`;
 - if `s0` is a vector of integers, convert it to `AASequence`, `CodonSequence` or `NumSequence`;
-  the conversion type depends on the alphabet of `g` and on the maximum element of `s0`.
+  the conversion type depends on the number of states `q` of `g` and on the maximum element
+  of `s0`. Graphs with `q == 21` are assumed to represent amino acids.
 
 The graph `g` is only used to determine the length of the sequence, and the alphabet size in the case of a numerical sequence.
 """
@@ -234,7 +235,7 @@ get_init_sequence(s0::AbstractSequence, g; kwargs...) = copy(s0)
 function get_init_sequence(
     s0::AbstractVector{<:Integer}, g; rng=Random.default_rng(), kwargs...
 )
-    return if g.alphabet == aa_alphabet
+    return if size(g).q == length(aa_alphabet)
         if maximum(s0) <= 21
             AASequence(s0)
         elseif 21 < maximum(s0) <= 65
@@ -278,29 +279,6 @@ end
 #=====================#
 ######## Utils ########
 #=====================#
-
-# function tmp_check_alphabet_consistency(g::PottsGraph, s0::CodonSequence)
-#     if isnothing(g.alphabet) || symbols(g.alphabet) != symbols(aa_alphabet)
-#         @warn """
-#             For now, sampling is only possible for graphs with the default alphabet $(aa_alphabet)
-#             Instead $(g.alphabet)
-#             """
-#     end
-#     return false
-# end
-function tmp_check_alphabet_consistency(g::PottsGraph, s0::Union{AASequence,CodonSequence})
-    if isnothing(g.alphabet) || symbols(g.alphabet) != symbols(aa_alphabet)
-        @warn """
-            For now, sampling is only possible for graphs with the default alphabet $(aa_alphabet)
-            Instead got `g.alphabet=`$(g.alphabet).
-            Possible fixes:
-            - use `NumSequence` instead of `AASequence` or `CodonSequence`
-            - set the potts model alphabet to `PottsEvolver.aa_alphabet`
-            """
-    end
-    return false
-end
-tmp_check_alphabet_consistency(g::PottsGraph, s0::AbstractSequence) = true
 
 function return_params(p::SamplingParameters, ::T) where {T<:AbstractSequence}
     d = Dict()

@@ -70,7 +70,6 @@ function mcmc_sample_continuous_tree!(
     params::SamplingParameters;
     rng=Random.default_rng(),
 ) where {S<:AbstractSequence}
-    tmp_check_alphabet_consistency(g, data(root(tree)).seq)
     @argcheck params.sampling_type == :continuous
 
     # logging & warnings
@@ -192,7 +191,6 @@ function mcmc_sample_tree!(
     params::SamplingParameters;
     rng=Random.default_rng(),
 ) where {S<:AbstractSequence}
-    tmp_check_alphabet_consistency(g, data(root(tree)).seq)
     @argcheck params.sampling_type == :discrete
 
     # logging & warnings

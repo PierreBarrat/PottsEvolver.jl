@@ -60,7 +60,6 @@ end
 @testset "Output values" begin
     L, q, M = (4, 21, 2)
     g = PottsGraph(L, q; init=:rand)
-    @test g.alphabet == aa_alphabet
 
     params = SamplingParameters(; Teq=1)
 
@@ -69,17 +68,9 @@ end
     S, _ = mcmc_sample(g, M, params; init=:random_num, alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.NumSequence}
 
-    # because g has no alphabet
-    g_noalphabet = PottsGraph(L, q; init=:rand, alphabet=nothing)
-    S, _ = mcmc_sample(g_noalphabet, M, params; init=[1, 2, 3, 4], alignment_output=false)
-    @test S isa AbstractVector{<:PottsEvolver.NumSequence}
-
-    # because g has an alphabet that is not the default aa
-    alphabet = Alphabet("ACDEFGHIKLMNPQRSTVWY-")
-    g_strangealphabet = PottsGraph(L, q; init=:rand, alphabet)
-    S, _ = mcmc_sample(
-        g_strangealphabet, M, params; init=[1, 2, 3, 4], alignment_output=false
-    )
+    # because g is not an amino acid model (q != 21)
+    g_num = PottsGraph(L, 5; init=:rand)
+    S, _ = mcmc_sample(g_num, M, params; init=[1, 2, 3, 4], alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.NumSequence}
 
     ## AA sequence
@@ -87,7 +78,7 @@ end
     S, _ = mcmc_sample(g, M, params; init=:random_aa, alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.AASequence}
 
-    # because g has aa_alphabet and init vector has elements <= 21
+    # because g has q=21 and init vector has elements <= 21
     S, _ = mcmc_sample(g, M, params; init=[1, 2, 3, 21], alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.AASequence}
 
@@ -96,7 +87,7 @@ end
     S, _ = mcmc_sample(g, M, params; init=:random_codon, alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.CodonSequence}
 
-    # because g has aa_alphabet and init vector has elements > 21
+    # because g has q=21 and init vector has elements > 21
     S, _ = mcmc_sample(g, M, params; init=[1, 2, 3, 22], alignment_output=false)
     @test S isa AbstractVector{<:PottsEvolver.CodonSequence}
 end

@@ -16,13 +16,11 @@ using PottsEvolver
         @test g_copy.J == g_original.J
         @test g_copy.h == g_original.h
         @test g_copy.β == g_original.β
-        @test g_copy.alphabet == g_original.alphabet
-        
+
         # Test that they are different objects
         @test g_copy !== g_original
         @test g_copy.J !== g_original.J
         @test g_copy.h !== g_original.h
-        @test g_copy.alphabet !== g_original.alphabet
     end
     
     # Test 2: Modification independence
@@ -73,21 +71,6 @@ using PottsEvolver
         g_rand_copy = copy(g_rand)
         @test g_rand_copy.J == g_rand.J
         @test g_rand_copy.h == g_rand.h
-    end
-    
-    # Test 4: Alphabet handling
-    @testset "Alphabet handling" begin
-        # With alphabet (q=21)
-        L = 6
-        g_with_alphabet = PottsGraph(L, 21; init=:null)
-        g_with_alphabet_copy = copy(g_with_alphabet)
-        @test g_with_alphabet_copy.alphabet == g_with_alphabet.alphabet
-        @test g_with_alphabet_copy.alphabet !== g_with_alphabet.alphabet
-        
-        # Without alphabet (q≠21)
-        g_no_alphabet = PottsGraph(L, 5; init=:null)
-        g_no_alphabet_copy = copy(g_no_alphabet)
-        @test g_no_alphabet_copy.alphabet === g_no_alphabet.alphabet === nothing
     end
     
     # Test 5: Type preservation

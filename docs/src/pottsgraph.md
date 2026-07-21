@@ -15,9 +15,10 @@ The `PottsGraph` structure represents a Potts model, a statistical model used to
 - `J`: A 4-dimensional array of dimensions `q x q x L x L` representing the coupling parameters between states at different positions.
 - `h`: A 2-dimensional array of dimensions `q x L` representing the local field parameters for each state at each position.
 - `β`: The inverse temperature parameter, used during sampling. 
-- `alphabet`: An optional `Alphabet` object to map states to characters (e.g., amino acids), see the [BioSequenceMappings.jl](https://github.com/PierreBarrat/BioSequenceMappings.jl) package.
 
 `q` represents the number of states (e.g., 21 for amino acids + gap), and `L` is the length of the sequence.
+Models with `q == 21` are assumed to represent amino acids: this is what determines the type of
+sequence used when sampling from an integer vector, see [`PottsEvolver.get_init_sequence`](@ref).
 
 ## Structure and Fields
 
@@ -28,7 +29,6 @@ The `PottsGraph` is defined as follows:
     J::Array{T,4}
     h::Array{T,2}
     β::T = 1.0
-    alphabet::Union{Nothing, BioAequenceMappings.Alphabet{Char,<:Integer}} = aa_alphabet
 end
 ```
 
