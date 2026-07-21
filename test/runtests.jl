@@ -2,7 +2,7 @@ using Test
 using PottsEvolver
 
 using Accessors
-using BioSequenceMappings
+using BioSequenceMappings: find_sequence # PottsEvolver now owns `hamming`; avoid the clash
 using Logging
 using Random
 using StatsBase

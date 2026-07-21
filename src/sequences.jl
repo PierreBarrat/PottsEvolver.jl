@@ -296,28 +296,6 @@ end
 ####### Misc #######
 #==================#
 
-"""
-    hamming(x::AbstractSequence, y::AbstractSequence)
-    hamming(x::CodonSequence, y::CodonSequence; source=:codon, kwargs...)
-"""
-function BioSequenceMappings.hamming(
-    x::AbstractSequence, y::AbstractSequence; source=nothing, kwargs...
-)
-    # source kwarg to allow blind use of hamming
-    return hamming(x.seq, y.seq; kwargs...)
-end
-function BioSequenceMappings.hamming(
-    x::CodonSequence, y::CodonSequence; source=:codon, kwargs...
-)
-    return if source == :codon
-        hamming(x.seq, y.seq; kwargs...)
-    elseif source == :aa
-        hamming(x.aaseq, y.aaseq; kwargs...)
-    else
-        error("Valid `source` values: `:codon` or `:aa`. Instead $source")
-    end
-end
-
 function intvec_to_sequence(s::AbstractVector{<:Integer}; v=true)
     q = maximum(s)
     return if q < 21 || q > 65

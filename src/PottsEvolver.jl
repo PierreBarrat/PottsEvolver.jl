@@ -21,8 +21,9 @@ import Base: convert, copy, copy!, show, write
 import Base: getindex, setindex!
 import Base: iterate, length, eltype, size
 
-import BioSequenceMappings: Alignment, to_string, hamming
+import BioSequenceMappings: Alignment, to_string
 export Alignment, Alphabet
+export hamming
 
 # Default types for numerical quantities
 const IntType = Int64
@@ -34,6 +35,8 @@ export genetic_code
 
 include("sequences.jl")
 export AbstractSequence, AASequence, CodonSequence, NumSequence
+
+include("misc.jl")
 #! format: off
 # public translate
 #! format: on
