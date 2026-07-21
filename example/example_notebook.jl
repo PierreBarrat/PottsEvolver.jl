@@ -16,7 +16,6 @@ end
 # ╔═╡ 992f54a2-c37a-47ce-9395-88dda801ecbc
 begin
     using TreeTools # at this point it's just useful to have this
-    using BioSequenceMappings
 end
 
 # ╔═╡ ab2d6cdb-b5be-438c-98c0-27bcb81f2f95
@@ -63,25 +62,24 @@ where $q$ is the number of possible states for a position (21 for amino acids an
 
 # ╔═╡ 5d878adb-7813-4105-8be1-9e919467ac1a
 md"""
-Another field `alphabet` contains the mapping from integers (*e.g.* used to index `h` and `J`) and biological symbols (amino acids, codons...). It is an object of type `Alphabet`, coming from the `BioSequenceMappings.jl` package. 
-Ideally, I would like this to allow the user to seamlessly change the meaning of the indices `a, b, ...`. However, it is not functional yet. I encourage the user to 
-- not rely on the `alphabet` field for now
-- if working with amino acids, ensure that the Potts model is consistent with the default alphabet defined by the string `"-ACDEFGHIKLMNPQRSTVWY"`. This is just assumed in some parts of the code. 
+The mapping between integers (*e.g.* used to index `h` and `J`) and biological symbols (amino acids, codons...) is fixed, and is not carried by the Potts model: a model with `q == 21` is assumed to represent amino acids, following the string `"-ACDEFGHIKLMNPQRSTVWY"`.
+
+`aa_alphabet` and `codon_alphabet` are functions that convert in both directions: `aa_alphabet('C')` gives an index and `aa_alphabet(3)` gives back a symbol. `symbols` returns all of them at once.
 """
 
 # ╔═╡ 5045ef14-8547-43a2-a105-d4ec0962b04f
-potts.alphabet 
+symbols(aa_alphabet)
 
 # ╔═╡ 58197d9e-3b67-40db-9852-6451cf4b254e
 md"""
-One can use the alphabet as a function to map from symbols to integers or the reverse. 
+The alphabets are functions mapping from symbols to integers or the reverse. 
 """
 
 # ╔═╡ b8431fc3-d619-4ce3-bbf8-2e33e4963288
-potts.alphabet(4) # convert integers to chars
+aa_alphabet(4) # convert integers to chars
 
 # ╔═╡ 25e2f982-9a3c-4499-b2b9-dee74dc36951
-potts.alphabet('D') # or the reverse
+aa_alphabet('D') # or the reverse
 
 # ╔═╡ be5ed71f-c3ac-464c-839f-4829f36058cf
 md"""
@@ -148,9 +146,9 @@ end
 
 # ╔═╡ f871ce6f-c80a-433e-a954-d34002d7b5c1
 md"""
-The sequences are in an `Alignment` object (from `BioSequenceMappings`). This essentially wraps the integer vectors in a `data` matrix, and the alphabet to convert them to biological symbols.
+The sequences are in a `SequenceSample` object. This wraps the integer vectors in a `data` matrix (one sequence per column) together with a `labels` vector, and remembers which kind of sequence the integers represent.
 
-If the output was translated from codons to amino acids (as is the case here), the alphabet is automatically the same as the one from the input Potts model. Otherwise, it is `codon_alphabet`. 
+If the output was translated from codons to amino acids (as is the case here), the sample holds amino acids. Otherwise, it holds codons.
 
 We can use it to iterate over sequences, write the result to a fasta file, etc...
 """
@@ -163,19 +161,19 @@ size(sequences) # length L x 10 sequences
 
 # ╔═╡ 97aa28b3-012b-4614-9e2a-7706d9d48402
 md"""
-It's also easy to write / read alignments. 
+Writing a sample to fasta is easy. `PottsEvolver` does not *read* fasta: use a package such as `FASTX` for that, and build sequences from the strings it gives you with `AASequence` or `CodonSequence`.
 """
 
 # ╔═╡ 0017a217-7cd6-4974-b936-30f93631396e
 let
-    write("example_alignment.fasta", sequences)
-    X = read_fasta("example_alignment.fasta")
-    all(x -> x[1] == x[2], zip(X, sequences))
+    write_fasta("example_sample.fasta", sequences)
+    println(first(eachline("example_sample.fasta"), 4))
+    rm("example_sample.fasta")
 end
 
 # ╔═╡ 72d67f50-de92-4795-bf09-c7a6e91114e5
 md"""
-Sometimes, it is easier to just have an array of sequences instead of an alignment. This is easily done:
+Sometimes, it is easier to just have an array of sequences instead of a `SequenceSample`. This is easily done:
 """
 
 # ╔═╡ 0aab35e9-99d8-41ff-83d6-94cbc420468c
@@ -183,7 +181,7 @@ let
     M = 3
     parameters = SamplingParameters(; Teq=100, burnin=0)
     chain = mcmc_sample(
-		potts, M, parameters; init=:random_aa, alignment_output=false
+		potts, M, parameters; init=:random_aa, pack_output=false
 	)
 	chain.sequences
 end
@@ -313,11 +311,11 @@ end;
 
 # ╔═╡ 863b9af8-7d93-4633-929c-bdfe7e934512
 md"""
-The `translate_output` argument means that the sequences in the final alignment are translated back to amino acids. If you need the result as a sequence of codons, set `translate_output=false`. The default alphabet for codons is `codon_alphabet`.
+The `translate_output` argument means that the sequences in the final sample are translated back to amino acids. If you need the result as a sequence of codons, set `translate_output=false`. Codons are then indexed by `codon_alphabet`, whose symbols are:
 """
 
 # ╔═╡ a1031609-9ee0-42da-9ab8-ea36fe2da040
-codon_alphabet
+symbols(codon_alphabet)
 
 # ╔═╡ 58c13678-8cc7-45f2-9720-6b9b47596ccd
 md"### Controlling the output"
@@ -325,9 +323,9 @@ md"### Controlling the output"
 # ╔═╡ 0fd48be5-b07f-4376-a915-c224990e2c97
 md"""
 The following arguments control the output of `run_mcmc`: 
-- `alignment_output` (default: `true`): return an `Alignment` containing the sequences. If `false`, will return a vector of sequences. 
-  The advantage of the alignment format is mainly that it is easy to convert to fasta, and that some convenient functions of `BioSequenceMappings` operate on alignment. 
-- `translate_output` (default: `true`): if a `CodonSequence` was provided as input, the output would normally also consist of codon sequences (or a codon based alignment).  This flag causes the output to be translated back to amino acids. 
+- `pack_output` (default: `true`): return a `SequenceSample` containing the sequences. If `false`, will return a vector of sequences. 
+  The advantage of the packed format is that sequences sit in a single matrix with their labels, ready to be written to fasta with `write_fasta`. 
+- `translate_output` (default: `true`): if a `CodonSequence` was provided as input, the output would normally also consist of codon sequences.  This flag causes the output to be translated back to amino acids. 
 """
 
 # ╔═╡ 578b2fea-f418-4f3c-8423-5be10412c884
@@ -348,12 +346,11 @@ sequences_codon[1] # integers larger than 21 --> codons
 # ╔═╡ 9bb03d89-8156-468d-a8e1-b7c8f753f9af
 # Here are three ways to map this to amino acids
 let
-    alphabet = sequences_codon.alphabet # same as potts.alphabet
     s0 = sequences_codon[1]
     @info "Integer codons" s0 # Vector{Integer} standing for codons
-    @info "Codons" alphabet(s0) # vector of PottsEvolver.Codon
-    @info "Integer AA" map(x -> genetic_code(x), s0) # Vector{Integer} standing for amino acids
-    @info "Char AA" map(x -> genetic_code(alphabet(x)), s0) # vector of Char, for amino acids
+    @info "Codons" map(codon_alphabet, s0) # vector of PottsEvolver.Codon
+    @info "Integer AA" map(genetic_code, s0) # Vector{Integer} standing for amino acids
+    @info "Char AA" map(x -> genetic_code(codon_alphabet(x)), s0) # vector of Char, for amino acids
 end
 
 # ╔═╡ 434db5aa-92d4-45dc-abda-30757305aa5e
@@ -416,9 +413,9 @@ interesting_leaf = label(first(leaves(tree)))
 let
     # Find a sequence given a leaf label
     @info "Let's look at leaf $(interesting_leaf)"
-    seq = find_sequence(interesting_leaf, result_tree.leaf_sequences)[2]
+    seq = result_tree.leaf_sequences[interesting_leaf] # look up by label
 	@info "The numerical sequence: $seq"
-    @info "Corresponding AA sequence: $(result_tree.leaf_sequences.alphabet(seq))"
+    @info "Corresponding AA sequence: $(String(map(aa_alphabet, seq)))"
 end
 
 # ╔═╡ e7e26419-29d1-4444-a248-5979c4ba755f

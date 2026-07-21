@@ -43,14 +43,14 @@ result = mcmc_sample(g, M, params; init=initial_sequence);
 ```
 
 The output is a named tuple with the following fields:
-- `sequences`: an alignment or vector of sampled sequences.
+- `sequences`: a `SequenceSample`, or a vector of sampled sequences if `pack_output=false`.
 - `tvals`: a vector with the number of steps at each sample.
 - `info`: information about the run.
 - `params`: parameters used for the run as a `Dict`. 
 
 ```@repl sampling_1
-result.sequences # a BioSequenceMappings.Alignment
-write("/tmp/example.fasta", result.sequences) # can be written to fasta format
+result.sequences # a SequenceSample: a matrix of integers plus one label per sequence
+write_fasta("/tmp/example.fasta", result.sequences) # can be written to fasta format
 run(`cat /tmp/example.fasta`) # headers correspond to the time of sampling
 ```
 
@@ -88,7 +88,7 @@ julia> length(result.sequences)
 julia> result.tvals == time_values
 true
 
-julia> result.sequences.names # sequence labels in the alignment correspond to sampling time
+julia> result.sequences.labels # sequence labels correspond to sampling time
 5-element Vector{String}:
  "10"
  "32"
@@ -109,8 +109,8 @@ result = mcmc_sample(g, "../../example/small_tree_integers.nwk", params; init=in
 result.tree # the tree object, with sequences stored at each node
 result.tree.root.data.seq == initial_sequence # the initial sequence is placed at the root
 ```
-The return value contains alignments of leaf and internal node sequences. 
-Sequences in the alignments are labeled according to the labels of the nodes in the input tree.
+The return value contains samples of leaf and internal node sequences. 
+Sequences in the samples are labeled according to the labels of the nodes in the input tree.
 If nodes are not labeled in the input tree, they are automatically assigned labels which can be read in the output tree. 
 ```@repl sampling_1
 result.internal_sequences
@@ -121,14 +121,14 @@ Alternatively, sequences can be stored in dictionaries indexed by node labels:
 ```@repl sampling_1
 result = mcmc_sample(
     g, "../../example/small_tree_integers.nwk", params; 
-    init=initial_sequence, alignment_output=false
+    init=initial_sequence, pack_output=false
 );
 result.leaf_sequences
 ```
 
 It is sometimes useful to perform sampling several times in a row. 
 This is done by calling `mcmc_sample(graph, tree, M, params)`, where `M` is the number of repetitions. 
-In this case, it is can be practical to have all sequences sampled at a given node grouped in a single alignment, instead of having a list of alignments that each correspond to one tree. 
+In this case, it is can be practical to have all sequences sampled at a given node grouped in a single sample, instead of having a list of samples that each correspond to one tree. 
 This is achieved by calling `PottsEvolver.pernode_alignment` on the output of `mcmc_sample`:
 ```@repl sampling_1
 M = 5 # five repeats
@@ -155,7 +155,7 @@ will first multiply each branch in the tree by a factor `L` (length of the seque
 Discrete sampling is quite straightforward: the time corresponds to a discrete number of mcmc steps. 
 In continuous time however, it is customary to scale time so that the expected number of mutations per site per unit of time is 1. 
 This is done by setting the `substitution_rate` field of `SamplingParameters`, see [Generative continuous time model reveals epistatic signatures in protein evolution](https://doi.org/10.1101/2025.09.17.676821).
-This average substituion rate can be computed either by sampling the potts model or by using an existing alignment of sequences. 
+This average substituion rate can be computed either by sampling the potts model or by using an existing set of sequences. 
 
 ```@repl sampling_1
 n_samples = 100 # compute the average transition rate from 100 samples
@@ -166,20 +166,12 @@ step_type = :glauber;
     # first generate sample with discrete time, then use it to compute the average rate
     s0 = AASequence(L)
     params = SamplingParameters(; sampling_type=:discrete, Teq) 
-    aln = mcmc_sample(g, M, params; init=s0).sequences
-    write("/tmp/tmp.fasta", aln) # save the alignment for use below
-    aln = map(AASequence, aln)
-    # compute the average transition rate from the sampled alignment
-    PottsEvolver.average_transition_rate(g, step_type, aln)
+    S = mcmc_sample(g, M, params; init=s0, pack_output=false).sequences
+    # compute the average transition rate from the sampled sequences
+    PottsEvolver.average_transition_rate(g, step_type, S)
 end
 
 Ω_2 = let
-    # Read the previously sampled alignment, stored in a fasta    
-    # Ω_1 == Ω_2
-    PottsEvolver.average_transition_rate(g, step_type, "/tmp/tmp.fasta")
-end
-
-Ω_3 = let
     # call the average_transition_rate function directly, which will sample the potts model
     s0 = AASequence(L)
     PottsEvolver.average_transition_rate(g, step_type, s0; n_samples, Teq)

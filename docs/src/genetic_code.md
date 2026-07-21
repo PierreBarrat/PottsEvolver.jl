@@ -30,7 +30,7 @@ The accessible neighbours of a codon are all coding codons reachable by a single
 ```julia
 params = SamplingParameters(; sampling_type=:discrete, Teq=100)
 result = mcmc_sample(potts, 10, params; init=:random_codon, translate_output=true)
-result.sequences  # amino acid alignment
+result.sequences  # a SequenceSample holding amino acids
 ```
 
 Set `translate_output=false` to keep the output as codon sequences.

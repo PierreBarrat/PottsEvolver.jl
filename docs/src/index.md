@@ -18,9 +18,9 @@ Simulate evolution of protein sequences (or other) using a Potts model.
 - Sample single MCMC chains, or along branches of a tree.
 - Sampling can take the genetic code into account. 
 
-_Note_: the package relies on two personal packages
-- [`TreeTools.jl`](https://github.com/PierreBarrat/TreeTools.jl) to handle phylogenetic trees
-- [`BioSequenceMappings.jl`](https://github.com/PierreBarrat/BioSequenceMappings.jl) to handle sequence alignments and to convert amino acids to digits.
+_Note_: the package relies on [`TreeTools.jl`](https://github.com/PierreBarrat/TreeTools.jl) to handle phylogenetic trees.
 
-_Remaining issues_: 
-- use of `Alphabet` not clear: it's part of the `PottsGraph`, but only the default alphabets can really be used. 
+Sequences are read from and written to strings with `AASequence(::AbstractString)` and
+`CodonSequence(::AbstractString)`, and samples are written to fasta with `write_fasta`.
+`PottsEvolver` does not read fasta itself: use a dedicated package such as
+[`FASTX.jl`](https://github.com/BioJulia/FASTX.jl) and convert.

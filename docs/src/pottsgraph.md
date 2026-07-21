@@ -18,7 +18,7 @@ The `PottsGraph` structure represents a Potts model, a statistical model used to
 
 `q` represents the number of states (e.g., 21 for amino acids + gap), and `L` is the length of the sequence.
 Models with `q == 21` are assumed to represent amino acids: this is what determines the type of
-sequence used when sampling from an integer vector, see [`PottsEvolver.get_init_sequence`](@ref).
+sequence used when sampling from an integer vector, see `?PottsEvolver.get_init_sequence`.
 
 ## Structure and Fields
 
