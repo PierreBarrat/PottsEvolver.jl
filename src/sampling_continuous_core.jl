@@ -229,9 +229,6 @@ end
 """
     average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence)
     average_transition_rate(g::PottsGraph, step_type, S::Vector{<:AbstractSequence})
-    average_transition_rate(
-        g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence
-    )
 
 Compute the average transition rate for the continuous time Markov chain based on `g`.
     A sample from `g` is generated using a discrete time Markov chain for this purpose.
@@ -240,7 +237,13 @@ In the first form, a sample from `g` is used for averaging.
 `s0` is only used to initialize the `CTMCState` and provide a type (codon or aa),
 and the keyword arguments are used to parametrize the sampling process.
 
-In the second form, the sample is provided as argument, either as a vector of sequences or as a fasta file.
+In the second form, the sample is provided as a vector of sequences.
+To average over sequences stored in a fasta file, read them yourself and pass the result:
+```julia
+using FASTX
+S = [AASequence(sequence(rec)) for rec in FASTAReader(open(fastafile))]
+average_transition_rate(g, step_type, S)
+```
 """
 function average_transition_rate(
     g::PottsGraph,
@@ -267,14 +270,6 @@ function average_transition_rate(
 )
     return mean(transition_rates(g, step_type, S))
 end
-function average_transition_rate(
-    g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence
-)
-    aln = read_fasta(fastafile)
-    sample = map(seq_type, aln)
-    return average_transition_rate(g, step_type, sample)
-end
-
 #========================================================================#
 ############################ Transition rates ############################
 #========================================================================#

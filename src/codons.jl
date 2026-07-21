@@ -149,28 +149,18 @@ end
 ######################### Codon helper functions #########################
 #========================================================================#
 
-function Base.show(io::IO, c::Codon)
-    aa, iaa = if !isstop(c)
-        aa = genetic_code(c)
-        iaa = aa_alphabet(aa)
-        aa, iaa
-    else
-        aa = '*'
-        iaa = "STOP"
-        aa, iaa
-    end
-    # print(io, "Codon $(codon_alphabet(c)): \"$(c.b1)$(c.b2)$(c.b3)\" --> $aa($iaa)")
-    return print(io, "\"$(c.b1)$(c.b2)$(c.b3)\"")
-end
+Base.show(io::IO, c::Codon) = print(io, "\"$(c.b1)$(c.b2)$(c.b3)\"")
+
 function Base.show(io::IO, x::MIME"text/plain", c::Codon)
-    aa, iaa = if !isstop(c)
-        aa = genetic_code(c)
-        iaa = aa_alphabet(aa)
-        aa, iaa
+    # `Codon` accepts a gap in any position, so it can hold frameshifts that are absent
+    # from the genetic code: check before looking anything up.
+    isvalid(c) || return println(io, "Codon \"$(c.b1)$(c.b2)$(c.b3)\": invalid (frameshift)")
+
+    aa, iaa = if isstop(c)
+        '*', "STOP"
     else
-        aa = '*'
-        iaa = "STOP"
-        aa, iaa
+        a = genetic_code(c)
+        a, aa_alphabet(a)
     end
     return println(
         io, "Codon $(codon_alphabet(c)): \"$(c.b1)$(c.b2)$(c.b3)\" --> $aa($iaa)"

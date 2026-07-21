@@ -1,3 +1,39 @@
+#==========================================================#
+##################### Writing sequences #####################
+#==========================================================#
+
+"""
+    write_fasta(file, sequences; labels=nothing, kwargs...)
+
+Write `sequences` to `file` in fasta format.
+`labels` defaults to the index of each sequence; extra keyword arguments are forwarded to
+`string`, so `as_aa=true` writes a `CodonSequence` vector as amino acids.
+
+`PottsEvolver` does not read fasta files: use a dedicated package and the string
+constructors to build sequences, *e.g.*
+```julia
+using FASTX
+seqs = [AASequence(sequence(rec)) for rec in FASTAReader(open(file))]
+```
+"""
+function write_fasta(
+    file::AbstractString,
+    sequences::AbstractVector{<:AbstractSequence};
+    labels=nothing,
+    kwargs...,
+)
+    labels = isnothing(labels) ? (1:length(sequences)) : labels
+    @argcheck length(labels) == length(sequences) """
+        Got $(length(labels)) labels for $(length(sequences)) sequences.
+        """
+    open(file, "w") do io
+        for (label, seq) in zip(labels, sequences)
+            write(io, ">", string(label), "\n", string(seq; kwargs...), "\n")
+        end
+    end
+    return nothing
+end
+
 #============================================================#
 ##################### Reading PottsGraph #####################
 #============================================================#

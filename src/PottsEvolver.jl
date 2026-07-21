@@ -76,6 +76,7 @@ export mcmc_sample
 
 include("IO.jl")
 export read_graph, read_potts_graph
+export write_fasta
 
 #=
 - codons.jl: alphabets and genetic code

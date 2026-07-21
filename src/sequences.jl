@@ -63,6 +63,22 @@ Return a random `AASequence{T}` of length `L`.
 function AASequence(rng::AbstractRNG, L::Integer; T=IntType)
     return AASequence(rand(rng, T(1):T(length(aa_alphabet)), L))
 end
+"""
+    AASequence(s::AbstractString)
+
+Build an `AASequence` from a string of amino acid symbols, *e.g.* `"AC-DE"`.
+Symbols outside of `PottsEvolver.aa_alphabet` raise an error.
+"""
+function AASequence(s::AbstractString; T=IntType)
+    seq = map(collect(s)) do c
+        @argcheck in(c, symbols(aa_alphabet)) """
+            Symbol '$c' is not an amino acid. Expected one of \
+            "$(prod(symbols(aa_alphabet)))".
+            """
+        return aa_alphabet(c)
+    end
+    return AASequence(convert(Vector{T}, seq))
+end
 AASequence(L::Integer; T=IntType) = AASequence(Random.default_rng(), L; T)
 AASequence{T}(rng::AbstractRNG, L::Integer) where {T<:Integer} = AASequence(rng, L; T)
 AASequence{T}(L::Integer) where {T<:Integer} = AASequence(L; T)
@@ -147,6 +163,26 @@ function CodonSequence{T}(rng::AbstractRNG, L::Int; kwargs...) where {T<:Integer
 end
 function CodonSequence{T}(L::Int; kwargs...) where {T<:Integer}
     return CodonSequence{T}(Random.default_rng(), L, kwargs...)
+end
+"""
+    CodonSequence(s::AbstractString)
+
+Build a `CodonSequence` from a string of nucleotides, *e.g.* `"ATGAAA"`.
+The length of `s` must be a multiple of three. Gap codons are written `"---"`;
+mixing gaps and nucleotides inside a codon is a frameshift and is rejected.
+"""
+function CodonSequence(s::AbstractString; T=IntType)
+    @argcheck length(s) % 3 == 0 """
+        Length of a nucleotide string must be a multiple of 3. Instead $(length(s)).
+        """
+    codons = map(Iterators.partition(s, 3)) do chunk
+        codon = Codon(join(chunk))
+        @argcheck isvalid(codon) """
+            Invalid codon "$(join(chunk))": expected three nucleotides or three gaps.
+            """
+        return codon_alphabet(codon)
+    end
+    return CodonSequence(convert(Vector{T}, codons); source=:codon)
 end
 
 ## Methods
@@ -246,6 +282,41 @@ function Base.getproperty(x::NumSequence{T,q}, sym::Symbol) where {T,q}
     end
     throw(ErrorException("type NumSequence has no field $sym"))
 end
+#=========================================================================#
+########################## Converting to String ##########################
+#=========================================================================#
+
+"""
+    string(s::AASequence)
+    string(s::CodonSequence; as_aa=false)
+
+Return the symbolic representation of `s`.
+For a `CodonSequence`, the default is the nucleotide string (three characters per position);
+use `as_aa=true` to get the translated amino acid string instead.
+
+Inverse of the `AASequence(::AbstractString)` / `CodonSequence(::AbstractString)`
+constructors, which is how sequences read from a fasta file (using *e.g.* `FASTX`) enter
+`PottsEvolver`.
+"""
+Base.string(s::AASequence) = String(map(aa_alphabet, s.seq))
+
+function Base.string(s::CodonSequence; as_aa=false)
+    return if as_aa
+        String(map(aa_alphabet, s.aaseq))
+    else
+        join(join(bases(codon_alphabet(c))) for c in s.seq)
+    end
+end
+
+function Base.string(::NumSequence)
+    return throw(
+        ArgumentError("""
+        A `NumSequence` has no symbolic representation and cannot be converted to a `String`.
+        Use `AASequence` or `CodonSequence`, or access the integers with `sequence(s)`.
+        """),
+    )
+end
+
 #===========================================================================#
 ########################## Converting to Alignment ##########################
 #===========================================================================#

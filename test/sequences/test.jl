@@ -172,3 +172,65 @@ end
         @test s4 == s5
     end
 end
+
+#==================================================#
+############# String conversion / IO ###############
+#==================================================#
+
+@testset "String conversion" begin
+    @testset "AASequence" begin
+        s = "AC-DEWY"
+        @test string(AASequence(s)) == s
+        @test AASequence(s).seq == map(aa_alphabet, collect(s))
+        @test string(AASequence(Int[])) == "" # empty sequence
+
+        # round trip from a random sequence
+        seq = AASequence(20)
+        @test AASequence(string(seq)) == seq
+
+        @test_throws ArgumentError AASequence("ACBDE") # 'B' not an amino acid
+    end
+
+    @testset "CodonSequence" begin
+        s = "ATGAAA---"
+        cs = CodonSequence(s)
+        @test string(cs) == s
+        @test length(cs) == 3
+        @test string(cs; as_aa=true) == "MK-"
+
+        # round trip from a random sequence
+        seq = CodonSequence(10; source=:codon)
+        @test CodonSequence(string(seq)) == seq
+
+        @test_throws ArgumentError CodonSequence("ATGA") # not a multiple of 3
+        @test_throws ArgumentError CodonSequence("A-G") # frameshift: mixed gap/nt
+        @test_throws ErrorException CodonSequence("TAA") # stop codon
+    end
+
+    @testset "NumSequence" begin
+        # no symbols exist for a NumSequence
+        @test_throws ArgumentError string(NumSequence(10, 5))
+    end
+end
+
+@testset "write_fasta" begin
+    file = tempname()
+
+    seqs = [AASequence("AC-DE"), AASequence("WYKLM")]
+    write_fasta(file, seqs)
+    @test read(file, String) == ">1\nAC-DE\n>2\nWYKLM\n"
+
+    write_fasta(file, seqs; labels=["first", "second"])
+    @test read(file, String) == ">first\nAC-DE\n>second\nWYKLM\n"
+
+    # codons: nucleotides by default, amino acids on request
+    codons = [CodonSequence("ATGAAA"), CodonSequence("TGGTAT")]
+    write_fasta(file, codons)
+    @test read(file, String) == ">1\nATGAAA\n>2\nTGGTAT\n"
+    write_fasta(file, codons; as_aa=true)
+    @test read(file, String) == ">1\nMK\n>2\nWY\n"
+
+    @test_throws ArgumentError write_fasta(file, seqs; labels=["only_one"])
+
+    rm(file)
+end
