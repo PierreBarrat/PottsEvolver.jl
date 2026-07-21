@@ -25,31 +25,17 @@ end
 
 Return a `PottsGraph{T}` of the required size.
 - `init == :null`: parameters are intialized to zero.
-- `init == :rand`: parameters are randomly sampled using `Jrand` and `hrand` keywords.
-
-## Random initialization
-
-- `hrand` should be a function `q -> h`.
-- `Jrand` should be a function `q -> J`.
-
-`Jrand` does not have to return a symetric matrix.
-The output matrix is made symetric with zeroes on the diagonal blocks.
-
+- `init == :rand`: parameters are randomly sampled, with `h` of order `1/sqrt(L)` and `J`
+  of order `1/L`. The couplings are made symetric with zeroes on the diagonal blocks.
 """
-function PottsGraph(
-    L,
-    q,
-    T=FloatType;
-    rng=Random.default_rng(),
-    init=:null,
-    Jrand=N -> 1 / L * randn(rng, N, N),
-    hrand=N -> 1 / sqrt(L) * randn(rng, N),
-)
+function PottsGraph(L, q, T=FloatType; rng=Random.default_rng(), init=:null)
     return if init == :null
         PottsGraph(; J=zeros(T, q, q, L, L), h=zeros(T, q, L))
     elseif init == :rand
-        J, h = _random_graph(rng, L, q)
+        J, h = _random_graph(rng, L, q, T)
         PottsGraph(; J, h)
+    else
+        throw(ArgumentError("`init` should be `:null` or `:rand`. Instead :$init"))
     end
 end
 
@@ -57,10 +43,13 @@ function Base.size(g::PottsGraph)
     return (L=size(g.h, 2), q=size(g.h, 1))
 end
 
-_random_graph(L::Integer, q::Integer) = _random_graph(Random.default_rng(), L, q)
-function _random_graph(rng, L, q)
-    h = reshape(randn(rng, L * q), q, L) / sqrt(L)
-    J = reshape(randn(rng, L * L * q * q), q, q, L, L) / L
+function _random_graph(L::Integer, q::Integer, T=FloatType)
+    return _random_graph(Random.default_rng(), L, q, T)
+end
+function _random_graph(rng, L, q, ::Type{T}=FloatType) where {T<:AbstractFloat}
+    # `T(...)` on the divisors: dividing by a `Float64` would promote the result back
+    h = reshape(randn(rng, T, L * q), q, L) / T(sqrt(L))
+    J = reshape(randn(rng, T, L * L * q * q), q, q, L, L) / T(L)
     for i in 1:L
         J[:, :, i, i] .= 0
         for j in (i + 1):L

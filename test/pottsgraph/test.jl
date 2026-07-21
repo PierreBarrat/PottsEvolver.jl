@@ -45,3 +45,36 @@ end
 
     @test_throws ErrorException PottsEvolver.set_gauge!(g, :some_random_gauge)
 end
+
+@testset "copy" begin
+    rng = MersenneTwister(123)
+    g = PottsGraph(5, 21; init=:rand, rng)
+    gc = copy(g)
+
+    @test gc.J == g.J && gc.h == g.h && gc.β == g.β
+    @test gc !== g && gc.J !== g.J && gc.h !== g.h
+
+    # the copy is independent of the original
+    gc.J[1, 2, 1, 2] = 999.0
+    gc.h[1, 1] = -555.0
+    gc.β = 2.5
+    @test g.J[1, 2, 1, 2] != 999.0
+    @test g.h[1, 1] != -555.0
+    @test g.β == 1.0
+
+    seq = rand(1:21, 5)
+    @test PottsEvolver.energy(seq, g) ≈ PottsEvolver.energy(seq, copy(g))
+end
+
+@testset "Numerical type" begin
+    # `T` must be respected for both `init` values: `:rand` used to ignore it, since
+    # `_random_graph` was called without it and `randn` defaults to Float64
+    for T in (Float64, Float32), init in (:null, :rand)
+        g = PottsGraph(3, 3, T; init)
+        @test g isa PottsGraph{T}
+        @test eltype(g.J) === eltype(g.h) === typeof(g.β) === T
+        @test copy(g) isa PottsGraph{T}
+    end
+
+    @test_throws ArgumentError PottsGraph(3, 3; init=:not_a_thing)
+end
