@@ -272,6 +272,25 @@ function Base.getproperty(x::NumSequence{T,q}, sym::Symbol) where {T,q}
     end
     throw(ErrorException("type NumSequence has no field $sym"))
 end
+
+#=========================================================================#
+############################ Number of states ############################
+#=========================================================================#
+
+"""
+    n_states(s::AbstractSequence)
+    n_states(::Type{<:AbstractSequence})
+
+Number of states a single position can take: the number of rows of the `q x L` matrices
+used in continuous-time sampling.
+This is `Q_AA` for `AASequence`, `Q_CODON` for `CodonSequence` (stop and gap codons
+included), and `q` for `NumSequence{T,q}`.
+"""
+n_states(::Type{<:AASequence}) = Q_AA
+n_states(::Type{<:CodonSequence}) = Q_CODON
+n_states(::Type{NumSequence{T,q}}) where {T,q} = q
+n_states(s::AbstractSequence) = n_states(typeof(s))
+
 #=========================================================================#
 ########################## Converting to String ##########################
 #=========================================================================#

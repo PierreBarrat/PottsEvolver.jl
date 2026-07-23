@@ -17,7 +17,11 @@ end
     x::Union{Nothing,Integer} # state of the next mutation
     R::Union{Nothing,FloatType} = nothing # average transition rate - Ω in paper
     energy::Union{Nothing,FloatType}
-    function CTMCState{S}(sequence::S, q::Integer, L::Integer) where {S<:AbstractSequence}
+    # `q` (states per position) and `L` are both fixed by the sequence: `q` from its type
+    # (see `n_states`) and `L` from its length.
+    function CTMCState{S}(sequence::S) where {S<:AbstractSequence}
+        q = n_states(sequence)
+        L = length(sequence)
         return new{S}(
             sequence,
             nothing,
@@ -35,20 +39,7 @@ end
     end
 end
 
-function CTMCState(sequence::CodonSequence)
-    q = Q_CODON
-    L = length(sequence)
-    return CTMCState{CodonSequence}(sequence, q, L)
-end
-function CTMCState(sequence::AASequence)
-    q = 21
-    L = length(sequence)
-    return CTMCState{AASequence}(sequence, q, L)
-end
-function CTMCState(sequence::NumSequence{T,q}) where {T,q}
-    L = length(sequence)
-    return CTMCState{NumSequence{T,q}}(sequence, q, L)
-end
+CTMCState(sequence::S) where {S<:AbstractSequence} = CTMCState{S}(sequence)
 
 function reset!(state::CTMCState)
     # state.seq = state.seq
@@ -576,18 +567,8 @@ end
 Compute the energy differences between `refseq` and neighbouring sequences.
 Return a matrix of dimensions `q` by `L`.
 """
-function compute_energy_differences(refseq::AASequence, g::PottsGraph)
-    ΔE = zeros(FloatType, 21, length(refseq))
-    return compute_energy_differences!(ΔE, refseq, g)
-end
-function compute_energy_differences(refseq::NumSequence{T,q}, g::PottsGraph) where {T,q}
-    ΔE = zeros(FloatType, q, length(refseq))
-    return compute_energy_differences!(ΔE, refseq, g)
-end
-function compute_energy_differences(refseq::CodonSequence, g::PottsGraph)
-    q = Q_CODON
-    L = length(refseq)
-    ΔE = zeros(Float64, q, L)
+function compute_energy_differences(refseq::AbstractSequence, g::PottsGraph)
+    ΔE = zeros(FloatType, n_states(refseq), length(refseq))
     return compute_energy_differences!(ΔE, refseq, g)
 end
 
