@@ -201,7 +201,7 @@ end
 
 Try to guess a reasonable init sequence from `s0`:
 - if `s0::AbstractSequence`, use a **copy** of it;
-- if `s0::Symbol`, then it should be among `[:random_codon, :random_aa, :random_num]`;
+- if `s0::Symbol`, then it should be among `[:random_codon, :random_aa, :random_rna, :random_num]`;
   a random sequence of the corresponding type is created, using the length of `g`;
 - if `s0` is a vector of integers, convert it to `AASequence`, `CodonSequence` or `NumSequence`;
   the conversion type depends on the number of states `q` of `g` and on the maximum element
@@ -223,11 +223,17 @@ function get_init_sequence(s0::Symbol, g::PottsGraph; rng=Random.default_rng(), 
             Instead $q.
             """
         AASequence(rng, L)
+    elseif s0 == :random_rna
+        @argcheck q == Q_RNA """
+            For sampling from `RNASequence`, graph alphabet size must be $(Q_RNA).
+            Instead $q.
+            """
+        RNASequence(rng, L)
     elseif s0 == :random_num
         NumSequence(rng, L, q)
     else
         error(
-            "Invalid symbol `init = $s0`. Options: `[:random_codon, :random_aa, :random_num]`",
+            "Invalid symbol `init = $s0`. Options: `[:random_codon, :random_aa, :random_rna, :random_num]`",
         )
     end
 end

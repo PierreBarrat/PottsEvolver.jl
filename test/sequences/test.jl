@@ -25,6 +25,37 @@
     @test pointer(aa_seq_copy.seq) != pointer(aa_seq_2.seq)
 end
 
+#====================================#
+############# RNASequence ############
+#====================================#
+
+@testset "RNASequence Tests" begin
+    rna_seq = RNASequence([1, 2, 3, 4, 5])
+    @test rna_seq isa RNASequence
+    @test length(rna_seq) == 5
+    @test PottsEvolver.n_states(rna_seq) == PottsEvolver.Q_RNA == 5
+    @test_throws ArgumentError RNASequence([1, 6]) # 6 > Q_RNA
+
+    # indexing
+    @test rna_seq[2] == 2
+    rna_seq[2] = 4
+    @test rna_seq[2] == 4
+
+    # copy / copy!
+    rna_seq_copy = copy(rna_seq)
+    @test rna_seq_copy == rna_seq
+    @test pointer(rna_seq.seq) != pointer(rna_seq_copy.seq)
+    copy!(rna_seq_copy, RNASequence([5, 4, 3, 2, 1]))
+    @test rna_seq_copy == RNASequence([5, 4, 3, 2, 1])
+
+    # string round trip: symbols are "-ACGU"
+    @test string(RNASequence("AC-GU")) == "AC-GU"
+    @test RNASequence("AC-GU").seq == map(rna_alphabet, collect("AC-GU"))
+    seq = RNASequence(12)
+    @test RNASequence(string(seq)) == seq
+    @test_throws ArgumentError RNASequence("ACGT") # 'T' is not an RNA symbol
+end
+
 #=============================================#
 ################ CodonSequence ################
 #=============================================#

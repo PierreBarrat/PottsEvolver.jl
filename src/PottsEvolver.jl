@@ -26,14 +26,14 @@ const IntType = Int64
 const FloatType = Float64
 
 include("codons.jl")
-export codon_alphabet, aa_alphabet, symbols
+export codon_alphabet, aa_alphabet, rna_alphabet, symbols
 export genetic_code
 #! format: off
-# public Q_AA, Q_CODON
+# public Q_AA, Q_RNA, Q_CODON
 #! format: on
 
 include("sequences.jl")
-export AbstractSequence, AASequence, CodonSequence, NumSequence
+export AbstractSequence, AASequence, RNASequence, CodonSequence, NumSequence
 
 include("misc.jl")
 

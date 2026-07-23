@@ -289,5 +289,6 @@ function _sample_from_weights(rng, W)
 end
 
 get_gibbs_holder(::CodonSequence, T=FloatType) = zeros(T, 4)
-get_gibbs_holder(::AASequence, T=FloatType) = zeros(T, 21)
+get_gibbs_holder(::AASequence, T=FloatType) = zeros(T, Q_AA)
+get_gibbs_holder(::RNASequence, T=FloatType) = zeros(T, Q_RNA)
 get_gibbs_holder(s::NumSequence, T=FloatType) = zeros(T, s.q)

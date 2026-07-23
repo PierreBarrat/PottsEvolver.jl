@@ -8,8 +8,8 @@ data::Matrix{T}         # `L x M`: sequences are stored in *columns*
 labels::Vector{String}  # one per sequence, in the same order as the columns
 ```
 
-The type parameter `S` records what the integers mean — `AASequence`, `CodonSequence` or
-`NumSequence` — which is what lets [`write_fasta`](@ref) and `PottsEvolver.translate`
+The type parameter `S` records what the integers mean — `AASequence`, `RNASequence`,
+`CodonSequence` or `NumSequence` — which is what lets [`write_fasta`](@ref) and `PottsEvolver.translate`
 know how to interpret them. A codon sample that has been translated is tagged `AASequence`,
 since its integers are then amino acids.
 
@@ -132,6 +132,7 @@ end
 
 # Rebuild a sequence object from one column, used when writing to fasta.
 _sequence_from_column(::SequenceSample{S}, col) where {S<:AASequence} = AASequence(collect(col))
+_sequence_from_column(::SequenceSample{S}, col) where {S<:RNASequence} = RNASequence(collect(col))
 function _sequence_from_column(::SequenceSample{S}, col) where {S<:CodonSequence}
     return CodonSequence(collect(col); source=:codon)
 end

@@ -79,23 +79,25 @@ Alias for `read_graph`.
 read_potts_graph = read_graph
 
 function read_graph_symbolic(file, T=FloatType)
-    ## Go through file twice: first to get L, the second to store parameters
-    # Note that this function only works for amino acids --> q = 21
+    ## Go through file twice: first to get L and the alphabet, the second to store parameters
+    # The alphabet (and hence q) is inferred from the state letters: the file lists every
+    # symbol at each position, so the `h` lines cover exactly the alphabet.
     L = 0
-    q = 21
     min_idx = Inf
-    index_style = 1
+    chars = Set{Char}()
     for (n, line) in enumerate(eachline(file))
         if !is_valid_line(line, :symbolic)
             throw(ArgumentError("""
                 Format problem with line $n in $file
-                Expected format `J i j a b` or `h i a`, with amino acid symbols.\
+                Expected format `J i j a b` or `h i a`, with symbolic states.\
                 Instead $line"""))
         end
         if !isempty(line) && line[1] == 'h'
-            i, a, val = parse_field_line_symbolic(line, T)
+            s = split(line, " ")
+            i = parse(Int, s[2])
             L = max(L, i)
             min_idx = min(min_idx, i)
+            push!(chars, s[3][1])
         end
     end
     if min_idx != 1 && min_idx != 0
@@ -107,18 +109,20 @@ function read_graph_symbolic(file, T=FloatType)
     if index_style == 0
         L += 1
     end
+    alphabet = _symbolic_alphabet_from_chars(chars)
+    q = length(symbols(alphabet))
     @debug "Index style: $index_style"
-    @debug L, q
+    @debug L, q, alphabet
 
     g = PottsGraph(L, q, T)
     for line in eachline(file)
         if line[1] == 'J'
-            i, j, a, b, val = parse_coupling_line_symbolic(line, T)
+            i, j, a, b, val = parse_coupling_line_symbolic(line, T, alphabet)
             index_style == 0 && (i += 1; j += 1)
             g.J[a, b, i, j] = val
             g.J[b, a, j, i] = val
         elseif line[1] == 'h'
-            i, a, val = parse_field_line_symbolic(line, T)
+            i, a, val = parse_field_line_symbolic(line, T, alphabet)
             index_style == 0 && (i += 1)
             g.h[a, i] = val
         end
@@ -181,11 +185,45 @@ function read_graph_numerical(file, T=FloatType)
     return g
 end
 
+# Alphabets whose states can appear as single letters in a *symbolic* PottsGraph file.
+# Codons are excluded: they are three characters, not one.
+const _SYMBOLIC_ALPHABETS = (aa_alphabet, rna_alphabet)
+
+# A graph file lists every symbol at each position, so the set of state letters seen in the
+# `h` lines is exactly the alphabet. Match it to decide which one it is.
+function _symbolic_alphabet_from_chars(chars)
+    cset = Set(chars)
+    for alphabet in _SYMBOLIC_ALPHABETS
+        Set(symbols(alphabet)) == cset && return alphabet
+    end
+    throw(
+        ArgumentError("""
+        State symbols $(sort(collect(cset))) match no known symbolic alphabet.
+        Known: $(join(map(a -> "\"$(prod(symbols(a)))\"", _SYMBOLIC_ALPHABETS), ", ")).
+        """),
+    )
+end
+
+# The reverse, for writing: the alphabet is fixed by the number of states.
+function _symbolic_alphabet_from_q(q)
+    for alphabet in _SYMBOLIC_ALPHABETS
+        length(symbols(alphabet)) == q && return alphabet
+    end
+    throw(
+        ArgumentError("""
+        No symbolic alphabet has q=$q states, cannot write this graph in symbolic format.
+        Known: aa (21), rna (5). Use `format=:numerical` instead.
+        """),
+    )
+end
+
 let
-    aas = prod(symbols(aa_alphabet))
+    # union of the letters of all symbolic alphabets; `-` stays leading so it is literal
+    letters = prod(unique(reduce(vcat, map(symbols, _SYMBOLIC_ALPHABETS))))
     patterns = Dict(
         :numerical => Regex.(["J [0-9]+ [0-9]+ [0-9]+ [0-9]+", "h [0-9]+ [0-9]+"]),
-        :symbolic => Regex.(["J [0-9]+ [0-9]+ [$(aas)]+ [$(aas)]+", "h [0-9]+ [$(aas)]"]),
+        :symbolic =>
+            Regex.(["J [0-9]+ [0-9]+ [$(letters)]+ [$(letters)]+", "h [0-9]+ [$(letters)]"]),
     )
     global get_line_patterns() = patterns
 end
@@ -212,10 +250,10 @@ end
 #         return true
 #     end
 # end
-function parse_field_line_symbolic(line, T)
+function parse_field_line_symbolic(line, T, alphabet)
     s = split(line, " ")
     i = parse(Int, s[2])
-    a = Int(aa_alphabet(s[3][1]))
+    a = Int(alphabet(s[3][1]))
     val = parse(T, s[4])
     return i, a, val
 end
@@ -226,12 +264,12 @@ function parse_field_line_numerical(line, T)
     val = parse(T, s[4])
     return i, a, val
 end
-function parse_coupling_line_symbolic(line, T)
+function parse_coupling_line_symbolic(line, T, alphabet)
     s = split(line, " ")
     i = parse(Int, s[2])
     j = parse(Int, s[3])
-    a = Int(aa_alphabet(s[4][1]))
-    b = Int(aa_alphabet(s[5][1]))
+    a = Int(alphabet(s[4][1]))
+    b = Int(alphabet(s[5][1]))
     val = parse(T, s[6])
     return i, j, a, b, val
 end
@@ -266,11 +304,13 @@ function write_graph_extended(
     @argcheck index_style == 0 || index_style == 1 "Got `index_style==`$(index_style)"
     @argcheck format in (:numerical, :symbolic) "Got format=$format"
     L, q = size(g)
+    # symbolic format writes states as letters: the alphabet is fixed by q (aa or rna)
+    alphabet = format == :symbolic ? _symbolic_alphabet_from_q(q) : nothing
     open(file, "w") do f
         for i in 1:L, j in (i + 1):L, a in 1:q, b in 1:q
             val = round(g.J[a, b, i, j]; sigdigits)
             if format == :symbolic
-                a, b = aa_alphabet.([a, b])
+                a, b = alphabet.([a, b])
             end
             if index_style == 0 && format == :numerical
                 write(f, "J $(i-1) $(j-1) $(a-1) $(b-1) $val\n")
@@ -289,7 +329,7 @@ function write_graph_extended(
         for i in 1:L, a in 1:q
             val = round(g.h[a, i]; sigdigits)
             if format == :symbolic
-                a = aa_alphabet(a)
+                a = alphabet(a)
             end
             if index_style == 0 && format == :numerical
                 write(f, "h $(i-1) $(a-1) $val\n")

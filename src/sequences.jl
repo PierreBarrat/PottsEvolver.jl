@@ -79,6 +79,62 @@ AASequence(L::Integer; T=IntType) = AASequence(Random.default_rng(), L; T)
 AASequence{T}(rng::AbstractRNG, L::Integer) where {T<:Integer} = AASequence(rng, L; T)
 AASequence{T}(L::Integer) where {T<:Integer} = AASequence(L; T)
 
+#====================================#
+############# RNASequence ############
+#====================================#
+
+"""
+    mutable struct RNASequence{T<:Integer} <: AbstractSequence
+
+Field: `seq::Vector{T}`.
+Wrapper around a vector of integers, with implied alphabet `PottsEvolver.rna_alphabet`
+(symbols `"-ACGU"`). Behaves like `AASequence`, but over the RNA alphabet.
+"""
+mutable struct RNASequence{T<:Integer} <: AbstractSequence
+    seq::Vector{T}
+    function RNASequence(x::AbstractVector{T}) where {T}
+        q = Q_RNA
+        @argcheck all(<=(q), x) "RNA is represented by `(1..$(q))` integers. Instead, $x"
+        return new{T}(x)
+    end
+end
+
+Base.copy(s::RNASequence) = RNASequence(copy(s.seq))
+function Base.copy!(dest::RNASequence, source::RNASequence)
+    @argcheck length(dest) == length(source)
+    for (i, a) in enumerate(source.seq)
+        dest.seq[i] = a
+    end
+    return dest
+end
+"""
+    RNASequence(L; T)
+
+Return a random `RNASequence{T}` of length `L`.
+"""
+function RNASequence(rng::AbstractRNG, L::Integer; T=IntType)
+    return RNASequence(rand(rng, T(1):T(Q_RNA), L))
+end
+"""
+    RNASequence(s::AbstractString)
+
+Build an `RNASequence` from a string of RNA symbols, *e.g.* `"AC-GU"`.
+Symbols outside of `PottsEvolver.rna_alphabet` raise an error.
+"""
+function RNASequence(s::AbstractString; T=IntType)
+    seq = map(collect(s)) do c
+        @argcheck in(c, symbols(rna_alphabet)) """
+            Symbol '$c' is not an RNA symbol. Expected one of \
+            "$(prod(symbols(rna_alphabet)))".
+            """
+        return rna_alphabet(c)
+    end
+    return RNASequence(convert(Vector{T}, seq))
+end
+RNASequence(L::Integer; T=IntType) = RNASequence(Random.default_rng(), L; T)
+RNASequence{T}(rng::AbstractRNG, L::Integer) where {T<:Integer} = RNASequence(rng, L; T)
+RNASequence{T}(L::Integer) where {T<:Integer} = RNASequence(L; T)
+
 #=============================================#
 ################ CodonSequence ################
 #=============================================#
@@ -283,10 +339,11 @@ end
 
 Number of states a single position can take: the number of rows of the `q x L` matrices
 used in continuous-time sampling.
-This is `Q_AA` for `AASequence`, `Q_CODON` for `CodonSequence` (stop and gap codons
-included), and `q` for `NumSequence{T,q}`.
+This is `Q_AA` for `AASequence`, `Q_RNA` for `RNASequence`, `Q_CODON` for `CodonSequence`
+(stop and gap codons included), and `q` for `NumSequence{T,q}`.
 """
 n_states(::Type{<:AASequence}) = Q_AA
+n_states(::Type{<:RNASequence}) = Q_RNA
 n_states(::Type{<:CodonSequence}) = Q_CODON
 n_states(::Type{NumSequence{T,q}}) where {T,q} = q
 n_states(s::AbstractSequence) = n_states(typeof(s))
@@ -297,17 +354,19 @@ n_states(s::AbstractSequence) = n_states(typeof(s))
 
 """
     string(s::AASequence)
+    string(s::RNASequence)
     string(s::CodonSequence; as_aa=false)
 
 Return the symbolic representation of `s`.
 For a `CodonSequence`, the default is the nucleotide string (three characters per position);
 use `as_aa=true` to get the translated amino acid string instead.
 
-Inverse of the `AASequence(::AbstractString)` / `CodonSequence(::AbstractString)`
-constructors, which is how sequences read from a fasta file (using *e.g.* `FASTX`) enter
-`PottsEvolver`.
+Inverse of the `AASequence(::AbstractString)` / `RNASequence(::AbstractString)` /
+`CodonSequence(::AbstractString)` constructors, which is how sequences read from a fasta
+file (using *e.g.* `FASTX`) enter `PottsEvolver`.
 """
 Base.string(s::AASequence) = String(map(aa_alphabet, s.seq))
+Base.string(s::RNASequence) = String(map(rna_alphabet, s.seq))
 
 function Base.string(s::CodonSequence; as_aa=false)
     return if as_aa

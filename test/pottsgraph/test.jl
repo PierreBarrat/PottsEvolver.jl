@@ -33,6 +33,34 @@
     # I could (should?) add a test where lines of the file are shuffled?
 end
 
+@testset "Symbolic IO: alphabet inference" begin
+    # The alphabet of a symbolic file is inferred from its state letters: a full amino acid
+    # set (q=21) vs the RNA set "-ACGU" (q=5). Round-trip both.
+    for q in (21, 5) # amino acids, then RNA
+        g = PottsGraph(4, q; init=:rand)
+        file = tempname()
+        write(file, g; format=:symbolic)
+        g2 = read_graph(file)
+        @test size(g2) == size(g)
+        # element-wise: the file is written with 5 significant digits
+        @test maximum(abs, g2.J .- g.J) < 1e-4
+        @test maximum(abs, g2.h .- g.h) < 1e-4
+        rm(file)
+    end
+
+    # A symbolic file is distinguished from a numerical one, and vice versa
+    g = PottsGraph(3, 5; init=:rand)
+    fsym, fnum = tempname(), tempname()
+    write(fsym, g; format=:symbolic)
+    write(fnum, g; format=:numerical)
+    @test PottsEvolver.infer_format_from_line(first(eachline(fsym))) == :symbolic
+    @test PottsEvolver.infer_format_from_line(first(eachline(fnum))) == :numerical
+    rm(fsym); rm(fnum)
+
+    # A graph whose q matches no symbolic alphabet cannot be written symbolically
+    @test_throws ArgumentError write(tempname(), PottsGraph(3, 7; init=:rand); format=:symbolic)
+end
+
 @testset "Gauge change" begin
     g = PottsGraph(5, 3; init=:rand)
     PottsEvolver.set_gauge!(g, :zero_sum)

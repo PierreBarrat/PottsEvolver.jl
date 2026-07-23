@@ -38,6 +38,32 @@ function aa_alphabet(c::AbstractChar)
 end
 aa_alphabet(i::Integer) = AA_SYMBOLS[i]
 
+const RNA_SYMBOLS = collect("-ACGU")
+const RNA_INDEX = Dict{Char,IntType}(c => i for (i, c) in enumerate(RNA_SYMBOLS))
+"""
+    Q_RNA
+
+Number of RNA symbols: the four nucleotides and the gap.
+"""
+const Q_RNA = IntType(length(RNA_SYMBOLS))
+
+"""
+    rna_alphabet(c::AbstractChar) -> Integer
+    rna_alphabet(i::Integer) -> Char
+
+Map an RNA symbol to its index, or an index back to its symbol. Symbols are `"-ACGU"`.
+"""
+function rna_alphabet(c::AbstractChar)
+    i = get(RNA_INDEX, c, nothing)
+    isnothing(i) && throw(
+        ArgumentError(
+            "'$c' is not an RNA symbol - expected one of \"$(prod(RNA_SYMBOLS))\""
+        ),
+    )
+    return i
+end
+rna_alphabet(i::Integer) = RNA_SYMBOLS[i]
+
 @kwdef struct Codon
     b1::Char
     b2::Char
@@ -89,9 +115,10 @@ codon_alphabet(i::Integer) = CODON_SYMBOLS[i]
 """
     symbols(alphabet)
 
-Return the vector of symbols used by `aa_alphabet` or `codon_alphabet`.
+Return the vector of symbols used by `aa_alphabet`, `rna_alphabet` or `codon_alphabet`.
 """
 symbols(::typeof(aa_alphabet)) = AA_SYMBOLS
+symbols(::typeof(rna_alphabet)) = RNA_SYMBOLS
 symbols(::typeof(codon_alphabet)) = CODON_SYMBOLS
 
 #==========================================#
