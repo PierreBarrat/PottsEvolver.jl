@@ -85,6 +85,7 @@ fraction_gap_step::Float64 = 0.9 # relevant for :discrete and codon sampling
 branchlength_meaning::BranchLengthMeaning # relevant for :discrete and sampling on a tree
 substitution_rate::Union{Nothing,Float64} = nothing # relevant for :continuous
 track_substitutions::Bool = false # relevant for continuous
+mutation_matrix::Union{Nothing,Matrix{Float64}} = nothing # relevant for :continuous
 ```
 
 `sampling_type` can be `:discrete` or `:continuous`.
@@ -126,6 +127,16 @@ can be used directly.
   This is computed automatically if not provided (but takes some time).
 - `track_substitutions`: track all substitutions (position, state, time) occuring during
   the Gillespie simulation. They are returned in the `info` output of `mcmc_sample`.
+- `mutation_matrix`: an optional `q x q` matrix `μ` of relative mutation rates (*e.g.*
+  Jukes-Cantor for nucleotides, JTT for amino acids). If provided, the continuous
+  transition rate for the mutation `(i, a) -> (i, b)` is multiplied by `μ[a, b]`.
+  Diagonal entries are ignored, off-diagonal entries must be non-negative, and `q` must
+  match the number of states of the sampled sequence.
+  !!! The gap must in general be included: all current alphabets use the gap as state `1`,
+  so `μ` is `q x q` over the *gapped* alphabet (*e.g.* `5x5` over `-ACGU` for RNA,
+  `21x21` for amino acids), not over the non-gap symbols alone.
+  !!! An **asymmetric** `μ` shifts the sampled equilibrium away from the Potts model towards
+  mutation-selection balance. `μ` is only used for continuous sampling.
 
 """
 @kwdef mutable struct SamplingParameters{T<:Real}
@@ -142,6 +153,7 @@ can be used directly.
     # for continuous sampling only - average substitution rate for a given Potts model
     substitution_rate::Union{Nothing,Float64} = nothing
     track_substitutions::Bool = false
+    mutation_matrix::Union{Nothing,Matrix{Float64}} = nothing
     function SamplingParameters(
         sampling_type,
         step_type,
@@ -152,6 +164,7 @@ can be used directly.
         branchlength_meaning,
         substitution_rate::Union{Nothing,Real},
         track_substitutions::Bool,
+        mutation_matrix::Union{Nothing,AbstractMatrix},
     ) where {T}
         step_meaning = try
             Symbol(step_meaning)
@@ -192,6 +205,37 @@ can be used directly.
 
         @argcheck isnothing(substitution_rate) || substitution_rate > 0
 
+        # Mutation matrix: validate the matrix-only properties here (size against the
+        # sequence type is checked at sampling time, see `check_mutation_matrix`).
+        if !isnothing(mutation_matrix)
+            mutation_matrix = convert(Matrix{Float64}, mutation_matrix)
+            @argcheck size(mutation_matrix, 1) == size(mutation_matrix, 2) """
+                `mutation_matrix` must be square. Instead $(size(mutation_matrix)).
+                """
+            # diagonal is ignored (a genuine generator matrix has negative diagonal)
+            @argcheck all(
+                mutation_matrix[a, b] >= 0 for
+                a in axes(mutation_matrix, 1), b in axes(mutation_matrix, 2) if a != b
+            ) "Off-diagonal entries of `mutation_matrix` must be non-negative."
+
+            symmetric = all(
+                isapprox(mutation_matrix[a, b], mutation_matrix[b, a]; atol=1e-8) for
+                a in axes(mutation_matrix, 1), b in axes(mutation_matrix, 2) if a < b
+            )
+            symmetric || @warn """
+                `mutation_matrix` is not symmetric: the sampled equilibrium is no longer the \
+                Potts model but mutation-selection balance. This is a valid model - make sure \
+                it is what you intend.
+                """ maxlog = 1
+
+            if sampling_type == :discrete
+                @warn """
+                    `mutation_matrix` only affects continuous sampling and is ignored by \
+                    discrete sampling.
+                    """
+            end
+        end
+
         return new{Type}(
             sampling_type,
             step_type,
@@ -202,6 +246,7 @@ can be used directly.
             branchlength_meaning,
             substitution_rate,
             track_substitutions,
+            mutation_matrix,
         )
     end
 end
@@ -227,5 +272,8 @@ function Base.show(io::IO, params::SamplingParameters)
             println(io, "  substitution_rate = not set")
         end
         println(io, "  track_substitutions = $(params.track_substitutions)")
+        if !isnothing(params.mutation_matrix)
+            println(io, "  mutation_matrix = $(size(params.mutation_matrix)) matrix")
+        end
     end
 end

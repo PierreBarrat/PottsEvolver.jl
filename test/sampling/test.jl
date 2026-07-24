@@ -3,6 +3,41 @@
     @test_throws ArgumentError SamplingParameters(; Teq=5, step_type=:dubstep)
     @test_throws ArgumentError SamplingParameters(; Teq=5, step_meaning=:olive_tree)
 
+    @testset "mutation_matrix" begin
+        cont = (; sampling_type=:continuous, step_type=:glauber, Teq=1.0)
+
+        # default is nothing
+        @test SamplingParameters(; cont...).mutation_matrix === nothing
+
+        # symmetric matrix: stored, converted to Float64
+        μ = [0 1 1; 1 0 1; 1 1 0]
+        p = SamplingParameters(; cont..., mutation_matrix=μ)
+        @test p.mutation_matrix isa Matrix{Float64}
+        @test p.mutation_matrix == μ
+
+        # a genuine generator matrix (negative diagonal) is fine; diagonal is ignored
+        @test SamplingParameters(;
+            cont..., mutation_matrix=[-2.0 1 1; 1 -2 1; 1 1 -2]
+        ) isa Any
+
+        # invalid: non-square, or negative off-diagonal
+        @test_throws ArgumentError SamplingParameters(;
+            cont..., mutation_matrix=[1.0 2 3; 4 5 6]
+        )
+        @test_throws ArgumentError SamplingParameters(;
+            cont..., mutation_matrix=[0.0 -1; 1 0]
+        )
+
+        # warnings: asymmetric mu (equilibrium shift), and mu on a discrete run (ignored)
+        μasym = [0 2 1; 1 0 1; 1 1 0]
+        @test_logs (:warn,) match_mode = :any SamplingParameters(;
+            cont..., mutation_matrix=μasym
+        )
+        @test_logs (:warn,) match_mode = :any SamplingParameters(;
+            sampling_type=:discrete, Teq=1, mutation_matrix=μ
+        )
+    end
+
     @testset "Construction" begin
         sampling_type = :discrete
         @test_throws ArgumentError SamplingParameters(; sampling_type, Teq=5.2) # discrete needs integer times
