@@ -114,6 +114,7 @@ function mcmc_sample_continuous_chain(
     if !pack_output && translate_output
         error("I have to implement this case")
     end
+    check_mutation_matrix(params.mutation_matrix, s0)
 
     @unpack step_type = params
 
@@ -153,7 +154,7 @@ function mcmc_sample_continuous_chain(
     # Burnin
     burnin = first(time_steps)
     @info "Initializing with $(burnin) burnin iterations... "
-    burnin > 0 && mcmc_steps!(state, g, burnin, step_type; rng)
+    burnin > 0 && mcmc_steps!(state, g, burnin, step_type; rng, params.mutation_matrix)
     S[1] = copy(state.seq)
 
     # Sampling
@@ -173,7 +174,7 @@ function mcmc_sample_continuous_chain(
         # doing T steps on the current configuration
         @debug "Sampling for time $T"
         _, number_substitutions, substitutions = mcmc_steps!(
-            state, g, T, step_type; rng, params.track_substitutions
+            state, g, T, step_type; rng, params.track_substitutions, params.mutation_matrix
         )
         # storing the result in S
         S[m + 1] = copy(state.seq)

@@ -71,6 +71,7 @@ function mcmc_sample_continuous_tree!(
     rng=Random.default_rng(),
 ) where {S<:AbstractSequence}
     @argcheck params.sampling_type == :continuous
+    check_mutation_matrix(params.mutation_matrix, data(root(tree)).seq)
 
     # logging & warnings
     let
@@ -118,7 +119,9 @@ function sample_children_continuous!(
         # mcmc using it as an init
         state.seq = s0 # state is uninitialised, this just avoids allocation
         state.previous_seq = nothing # to make sure not to take state seriously
-        mcmc_steps!(state, g, branch_length(c), params.step_type; kwargs...)
+        mcmc_steps!(
+            state, g, branch_length(c), params.step_type; params.mutation_matrix, kwargs...
+        )
         # copy result to child
         data!(c, Sequence(state.seq))
         # recursive

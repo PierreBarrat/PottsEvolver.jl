@@ -114,6 +114,60 @@ end
     end
 end
 
+@testset "mutation_matrix" begin
+    L, q = 5, 5
+    g = PottsGraph(L, q; init=:rand)
+    seq = NumSequence(rand(1:q, L), q)
+
+    @testset "rate mechanic" begin
+        # μ multiplies the rate (i, a) -> (i, b) by μ[a, b], with `a` the current state at i
+        μ = rand(q, q)
+        Q0 = PottsEvolver.transition_rates(seq, g, :glauber)
+        Qμ = PottsEvolver.transition_rates(seq, g, :glauber; mutation_matrix=μ)
+        cur = PottsEvolver.sequence(seq)
+        @test all(Qμ[b, i] ≈ Q0[b, i] * μ[cur[i], b] for b in 1:q, i in 1:L)
+    end
+
+    @testset "μ of ones is a no-op" begin
+        μ = ones(q, q)
+        Q0 = PottsEvolver.transition_rates(seq, g, :glauber)
+        Qμ = PottsEvolver.transition_rates(seq, g, :glauber; mutation_matrix=μ)
+        @test Qμ ≈ Q0
+    end
+
+    @testset "wrong size rejected at sampling time" begin
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:glauber, Teq=1.0, substitution_rate=1.0,
+            mutation_matrix=ones(q + 1, q + 1),
+        )
+        @test_throws ArgumentError mcmc_sample(g, 3, params; init=:random_num)
+    end
+
+    @testset "codon sequences rejected" begin
+        gc = PottsGraph(L, 21; init=:null)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:glauber, Teq=1.0, substitution_rate=1.0,
+            mutation_matrix=ones(PottsEvolver.Q_CODON, PottsEvolver.Q_CODON),
+        )
+        @test_throws ArgumentError mcmc_sample(gc, 3, params; init=:random_codon)
+    end
+
+    @testset "sampling with μ is reproducible" begin
+        μ = rand(q, q)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:glauber, Teq=1.0, substitution_rate=1.0,
+            mutation_matrix=μ,
+        )
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; rng, init=:random_num).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; rng, init=:random_num).sequences
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+end
+
 @testset "Reproducibility" begin
     @testset "Continuous - Glauber" begin
         L, q = 10, 21
