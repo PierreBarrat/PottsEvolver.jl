@@ -138,7 +138,7 @@ end
 
     # Test continuous case - Float Teq and :continuous sampling_type
     params_continuous = SamplingParameters(;
-        Teq=5.0, sampling_type=:continuous, step_type=:glauber
+        Teq=5.0, sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0
     )
     S_continuous =
         mcmc_sample(
@@ -149,7 +149,7 @@ end
     # Test mixed case 1 - Integer Teq but :continuous sampling_type
     # Should convert to continuous
     params_mixed1 = SamplingParameters(;
-        Teq=Int(5), sampling_type=:continuous, step_type=:metropolis
+        Teq=Int(5), sampling_type=:continuous, step_type=:metropolis, substitution_rate=1.0
     )
     S_mixed1 =
         mcmc_sample(
@@ -184,6 +184,9 @@ end
 
         tvals = [0.0, 1.0, 2.0]
         @test_throws MethodError mcmc_sample(g, tvals, params_discrete)
+
+        # continuous sampling requires substitution_rate to be set
+        @test_throws ArgumentError mcmc_sample(g, tvals, params_continuous)
     end
 
     # test in discrete case
@@ -228,7 +231,9 @@ end
 
     @testset "Continuous" begin
         sampling_type = :continuous
-        params = SamplingParameters(; sampling_type, step_meaning=:changed, Teq=4, burnin=0)
+        params = SamplingParameters(;
+            sampling_type, step_meaning=:changed, Teq=4, burnin=0, substitution_rate=1.0
+        )
 
         time_steps = range(0, 3; length=5)
         S, tvals, _ = mcmc_sample(g, time_steps, params)

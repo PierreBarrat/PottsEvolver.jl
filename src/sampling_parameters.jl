@@ -121,10 +121,11 @@ can be used directly.
 
 - `Teq` and `burnin` are floats.
 - `step_type` can be `:metropolis`, `:glauber` or `:sqrt`.
-- `substitution_rate` is the average substitution rate for a given Potts model
+- `substitution_rate` is the average substitution rate `Ω` for a given Potts model
   (the average runs over sequences).
-  It is the result of `average_substitution_rate`.
-  This is computed automatically if not provided (but takes some time).
+  It is the result of `average_transition_rate`.
+  It **must** be set for continuous sampling: compute it once with
+  `average_transition_rate(g, step_type, s0)` and pass it here.
 - `track_substitutions`: track all substitutions (position, state, time) occuring during
   the Gillespie simulation. They are returned in the `info` output of `mcmc_sample`.
 - `mutation_matrix`: an optional `q x q` matrix `μ` of relative mutation rates (*e.g.*

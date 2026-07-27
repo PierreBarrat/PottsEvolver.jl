@@ -91,17 +91,14 @@ function mcmc_sample_continuous_tree!(
 
     # Setting the CTMCState
     rootseq = data(root(tree)).seq
+    @argcheck !isnothing(params.substitution_rate) """
+    Continuous sampling requires `substitution_rate` (Ω) to be set in the parameters.
+    Compute it with `average_transition_rate(g, step_type, rootseq)` and pass it as
+    `SamplingParameters(; ..., substitution_rate=Ω)`.
+    """
+    @info "Using average model substitution rate $(params.substitution_rate)"
     state = CTMCState(rootseq)
-    state.R = if !isnothing(params.substitution_rate)
-        @info "Using provided average model substitution rate $(params.substitution_rate)"
-        params.substitution_rate
-    else
-        @info "Computing average substitution rate for the model using discrete sampling..."
-        (; value, time) = @timed average_transition_rate(g, params.step_type, rootseq; rng)
-        @info "Done in $time seconds"
-        @info "Average substitution rate: $value"
-        value
-    end
+    state.R = params.substitution_rate
 
     # Sampling
     time = @elapsed sample_children_continuous!(root(tree), g, params, state; rng)

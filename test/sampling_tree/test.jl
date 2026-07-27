@@ -77,7 +77,8 @@ end
         tree = PottsEvolver.prepare_tree(balanced_binary_tree(8, 1.0), rootseq)
         @test all(node -> length(data(node).seq) == 0, nodes(tree; skiproot=true))
         params = SamplingParameters(;
-            sampling_type=:continuous, step_type=:glauber, Teq=5, burnin=100
+            sampling_type=:continuous, step_type=:glauber, Teq=5, burnin=100,
+            substitution_rate=1.0,
         )
         tree = PottsEvolver.mcmc_sample_continuous_tree!(g, tree, params)
         @test all(node -> length(data(node).seq) == L, nodes(tree; skiproot=true))
@@ -115,7 +116,8 @@ end
 
     @testset "Continuous" begin
         params = SamplingParameters(;
-            sampling_type=:continuous, step_meaning=:changed, Teq=1, burnin=100
+            sampling_type=:continuous, step_meaning=:changed, Teq=1, burnin=100,
+            substitution_rate=1.0,
         )
         # providing root sequence
         rootseq = CodonSequence(L)
@@ -134,7 +136,8 @@ end
 
         # providing init kwarg and no burnin
         params = SamplingParameters(;
-            sampling_type=:continuous, step_meaning=:accepted, Teq=0, burnin=0
+            sampling_type=:continuous, step_meaning=:accepted, Teq=0, burnin=0,
+            substitution_rate=1.0,
         )
         sampled_tree = @test_logs min_level = Logging.Warn PottsEvolver.mcmc_sample_continuous_tree(
             g, tree, params; init=:random_aa
