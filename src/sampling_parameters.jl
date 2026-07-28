@@ -4,7 +4,7 @@
 
 const VALID_STEP_TYPES = [:gibbs, :metropolis, :glauber, :sqrt]
 const VALID_STEP_MEANINGS = [:proposed, :accepted, :changed]
-const VALID_STEP_TYPES_CONTINUOUS = [:metropolis, :glauber, :sqrt, :gibbs]
+const VALID_STEP_TYPES_CONTINUOUS = [:metropolis, :glauber, :sqrt, :gibbs, :mutsel]
 const VALID_STEP_TYPES_DISCRETE = [:gibbs]
 
 """
@@ -120,7 +120,7 @@ Since any positive real number is acceptable as a sampling time, branch lenghts 
 can be used directly.
 
 - `Teq` and `burnin` are floats.
-- `step_type` can be `:metropolis`, `:glauber` or `:sqrt`.
+- `step_type` can be `:metropolis`, `:glauber`, `:sqrt`, `:gibbs` or `:mutsel`.
 - `substitution_rate` is the average substitution rate `Ω` for a given Potts model
   (the average runs over sequences).
   It is the result of `average_transition_rate`.

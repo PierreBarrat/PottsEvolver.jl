@@ -230,6 +230,22 @@ end
         end
     end
 
+    @testset "Continuous - mutsel - Num" begin
+        L, q = 10, 21
+        g = PottsGraph(L, q; init=:null)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:mutsel, Teq=1.0, substitution_rate=1.0
+        )
+        init = :random_num
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+
     @testset "Continuous - glauber - Codon - Tree" begin
         L, q = 10, 21
         g = PottsGraph(L, q; init=:null)
