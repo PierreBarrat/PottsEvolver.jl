@@ -154,6 +154,9 @@ function softmax!(X)
     return X
 end
 
+# Shannon entropy (natural log) of a probability vector, with 0 * log(0) ≡ 0.
+_entropy(p) = -sum(x -> iszero(x) ? zero(x) : x * log(x), p)
+
 """
     energy(s, g::PottsGraph)
 
@@ -223,7 +226,7 @@ function context_dependent_entropy(s::AbstractSequence, g::PottsGraph)
             f[b] = g.β * ΔE
         end
         softmax!(f)
-        CDE += entropy(f)
+        CDE += _entropy(f)
     end
 
     return CDE

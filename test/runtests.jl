@@ -4,7 +4,6 @@ using PottsEvolver
 using Accessors
 using Logging
 using Random
-using StatsBase
 using TreeTools
 
 @testset "PottsEvolver.jl" begin

@@ -6,7 +6,7 @@ using LoggingExtras
 using PoissonRandom
 using ProgressMeter
 using Random
-using StatsBase
+using Statistics
 using TreeTools
 using UnPack
 
