@@ -1,7 +1,6 @@
 module PottsEvolver
 
 using ArgCheck
-using Distributions
 using Logging
 using LoggingExtras
 using PoissonRandom

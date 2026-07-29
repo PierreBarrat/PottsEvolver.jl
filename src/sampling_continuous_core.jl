@@ -148,7 +148,7 @@ function gillespie!(
         # @debug "Scaled substitution rate per site: $(R_scaled/L)"
         # pick time of next substitution
 
-        Δt = rand(rng, Exponential(1 / R_scaled))
+        Δt = randexp(rng) / R_scaled
         state.t += Δt # tracking total time in state
         t += Δt
 
