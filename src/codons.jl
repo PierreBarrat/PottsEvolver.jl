@@ -277,7 +277,7 @@ what other codons are accessible by one mutation?
 =#
 
 function _build_codon_access_map()
-    M = Dict{Tuple{IntType,IntType},Tuple{ReadOnlyVector{IntType},ReadOnlyVector{IntType}}}()
+    M = Dict{Tuple{IntType,IntType},Tuple{Vector{IntType},Vector{IntType}}}()
     for c in 1:Q_CODON, i in 1:3
         codon = codon_alphabet(c)
         if !isgap(codon) && isvalid(codon)
@@ -287,10 +287,7 @@ function _build_codon_access_map()
                 return codon_alphabet(Codon(nts...))
             end
             filter!(!isstop, accessible_codons)
-            M[c, i] = (
-                ReadOnlyArray(accessible_codons),
-                ReadOnlyArray(map(genetic_code, accessible_codons)),
-            )
+            M[c, i] = (accessible_codons, map(genetic_code, accessible_codons))
         end
     end
     return M
@@ -304,7 +301,7 @@ Similar to the above, with the following differences.
 - A codon is not accessible from itself (this is used for continuous time sampling).
 =#
 function _build_codon_access_map_2()
-    M = Dict{IntType,Tuple{ReadOnlyVector{IntType},ReadOnlyVector{IntType}}}()
+    M = Dict{IntType,Tuple{Vector{IntType},Vector{IntType}}}()
 
     for c in 1:Q_CODON
         codon = codon_alphabet(c)
@@ -314,10 +311,7 @@ function _build_codon_access_map_2()
         if isgap(codon)
             accessible_codons = collect(1:Q_CODON)
             filter!(c -> iscoding(codon_alphabet(c)), accessible_codons) # remove all non-coding (i.e. gap and stop)
-            M[c] = (
-                ReadOnlyArray(accessible_codons),
-                ReadOnlyArray(map(genetic_code, accessible_codons)),
-            )
+            M[c] = (accessible_codons, map(genetic_code, accessible_codons))
             continue
         end
 
@@ -335,10 +329,7 @@ function _build_codon_access_map_2()
         # add gap codon
         push!(accessible_codons, codon_alphabet(Codon("---")))
         # store
-        M[c] = (
-            ReadOnlyArray(accessible_codons),
-            ReadOnlyArray(map(genetic_code, accessible_codons)),
-        )
+        M[c] = (accessible_codons, map(genetic_code, accessible_codons))
     end
 
     return M
