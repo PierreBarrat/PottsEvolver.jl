@@ -79,3 +79,5 @@ end
         end
     end
 end
+
+include("load_init_test.jl")
