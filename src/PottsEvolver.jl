@@ -91,5 +91,6 @@ export write_fasta
 =#
 
 include("Parallel/Parallel.jl")
+include("CLI.jl")
 
 end

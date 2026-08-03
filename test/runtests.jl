@@ -30,6 +30,10 @@ using TreeTools
     @testset "Sampling on tree" begin
         include("sampling_tree/test.jl")
     end
+
+    @testset "CLI" begin
+        include("cli/test.jl")
+    end
 end
 
 @testset "Aqua.jl" begin
