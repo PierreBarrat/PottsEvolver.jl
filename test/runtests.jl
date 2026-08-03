@@ -2,6 +2,7 @@ using Test
 using PottsEvolver
 
 using Accessors
+using ArgParse
 using Logging
 using Random
 using TreeTools

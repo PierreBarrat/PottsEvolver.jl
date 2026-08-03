@@ -100,7 +100,7 @@ function load_init(
         return PottsEvolver.get_init_sequence(Symbol(init), g; rng)
     end
 
-    file, seqname = _split_init_path(init)
+    file, seqname = _split_init_path(init) # split at first comma
     @argcheck isfile(file) "No such file: `$file`"
     s = _read_fasta_sequence(file, seqname)
 
@@ -147,7 +147,7 @@ function _infer_sequence_type(s::AbstractString, g::PottsGraph)
     (; q, L) = size(g)
     chars = Set(s)
 
-    if !isempty(intersect(chars, _AA_EXCLUSIVE_SYMBOLS))
+    if any(in(_AA_EXCLUSIVE_SYMBOLS), chars)
         @argcheck q == PottsEvolver.Q_AA && length(s) == L """
             Sequence contains symbol(s) exclusive to amino acids \
             ($(join(intersect(chars, _AA_EXCLUSIVE_SYMBOLS), ", "))), but the graph is \
@@ -155,7 +155,7 @@ function _infer_sequence_type(s::AbstractString, g::PottsGraph)
             Pass `--init-type` explicitly if this is intentional.
             """
         return AASequence
-    elseif !isempty(intersect(chars, _RNA_EXCLUSIVE_SYMBOLS))
+    elseif any(in(_RNA_EXCLUSIVE_SYMBOLS), chars)
         @argcheck q == PottsEvolver.Q_RNA && length(s) == L """
             Sequence contains symbol(s) exclusive to RNA \
             ($(join(intersect(chars, _RNA_EXCLUSIVE_SYMBOLS), ", "))), but the graph is \
@@ -199,16 +199,111 @@ function (@main)(ARGS)
     return nothing
 end
 
-function parse_cli(args)
-    tab = ArgParseSettings()
-    @add_arg_table tab begin
-        "sample-tree"
-            help="Sample along branches of a tree"
-            action=:command
-        "sample-chain"
-            help="Sample a chain"
-            action=:command
+#================================#
+########### CLI parsing ##########
+#================================#
+
+# Flags common to both subcommands: input files, output location, init sequence, seed,
+# verbosity. Model parameters themselves live in the --params TOML file, not here.
+function _add_shared_args!(settings::ArgParseSettings)
+    @add_arg_table! settings begin
+        "model"
+        help = "Path to a Potts graph file (see `read_graph`)"
+        required = true
+        "--params", "-p"
+        help = "Path to a TOML file with `SamplingParameters` fields (see `load_params`)"
+        required = true
+        "--outdir", "-o"
+        help = "Output directory"
+        default = pwd()
+        "--prefix"
+        help = "Output filename prefix (defaults to `model`'s basename without extension)"
+        default = nothing
+        "--init"
+        help = "One of random_aa/random_codon/random_rna/random_num, or a fasta path \
+                optionally suffixed with `,seqname` (see `load_init`)"
+        default = "random_aa"
+        "--init-type"
+        help = "One of aa/codon/rna: force the sequence type read from an --init fasta \
+                path, skipping inference"
+        default = nothing
+        "--seed"
+        help = "Integer RNG seed"
+        arg_type = Int
+        default = nothing
+        "--verbose", "-v"
+        help = "Verbosity: <0 error, 0 warn, 1 info, >=2 debug"
+        arg_type = Int
+        default = 0
+        "--log-verbose"
+        help = "Verbosity for the log file always written alongside the other outputs"
+        arg_type = Int
+        default = 1
+        "--compute-omega"
+        help = "If `substitution_rate` is missing from --params (continuous sampling \
+                only), compute it via `average_transition_rate` before sampling"
+        action = :store_true
+        "--translate"
+        help = "Forwarded as `translate_output` to `mcmc_sample`; only relevant when the \
+                initial/root sequence is a `CodonSequence`. If omitted, this command's own \
+                library default is used."
+        arg_type = Bool
+        default = nothing
     end
-    return parse_args(args, tab)
+    return settings
+end
+
+"""
+    parse_cli(args) -> Dict
+
+Parse `pottsevolver`'s command-line arguments for the `sample-chain` and `sample-tree`
+subcommands. Returns the nested `Dict` produced by `ArgParse.parse_args`: top-level
+`"%COMMAND%"` names the chosen subcommand, and `d[d["%COMMAND%"]]` holds that subcommand's
+own flags. Run `pottsevolver --help`, `pottsevolver sample-chain --help` or
+`pottsevolver sample-tree --help` for the full, authoritative flag list.
+
+A parse error raises an `ArgParse.ArgParseError` (rather than exiting the process), so it
+can be caught and reported by the caller.
+"""
+function parse_cli(args)
+    settings = ArgParseSettings(; exc_handler=ArgParse.debug_handler)
+    @add_arg_table! settings begin
+        "sample-chain"
+        action = :command
+        help = "Sample sequences along a Markov chain"
+        "sample-tree"
+        action = :command
+        help = "Sample sequences along the branches of a phylogenetic tree"
+    end
+
+    _add_shared_args!(settings["sample-chain"])
+    @add_arg_table! settings["sample-chain"] begin
+        "-M", "--n-samples"
+        help = "Number of samples taken along the chain (spaced by `Teq`, per --params)"
+        arg_type = Int
+        default = 1
+        "--tvals"
+        help = "Explicit sampling schedule (space-separated numbers), bypassing -M/Teq. \
+                The first value is the burn-in time; later values are absolute \
+                times/steps, not deltas"
+        nargs = '*'
+        arg_type = Float64
+        default = Float64[]
+        "--tvals-file"
+        help = "Path to a file with one time value per line, as an alternative to --tvals"
+        default = nothing
+    end
+
+    _add_shared_args!(settings["sample-tree"])
+    @add_arg_table! settings["sample-tree"] begin
+        "tree"
+        help = "Path to a Newick tree file"
+        required = true
+        "--internals"
+        help = "Also write internal-node sequences and the (possibly relabeled) sampled tree"
+        action = :store_true
+    end
+
+    return parse_args(args, settings)
 end
 end # module CLI

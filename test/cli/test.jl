@@ -81,3 +81,4 @@ end
 end
 
 include("load_init_test.jl")
+include("parse_cli_test.jl")
