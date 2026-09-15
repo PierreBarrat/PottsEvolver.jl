@@ -6,6 +6,7 @@
     mcmc_sample(
         g::PottsGraph, M::Integer, s0::AbstractSequence, params::SamplingParameters;
         rng=Random.GLOBAL_RNG, verbose=0, progress_meter=true, pack_output=true,
+        translate_output=false,
     )
     mcmc_sample(
         g::PottsGraph, M::Integer, params::SamplingParameters; init=:random_num, kwargs...)
@@ -25,6 +26,12 @@ See `?get_init_sequence` for details on how the initial sequence is determined f
 Third form: provide a set of times `tvals` at which samples are taken. Can also be used
 with the `init` kwarg.
 
+
+If `pack_output`, the sequences are wrapped into a [`SequenceSample`](@ref), otherwise
+they are returned as a vector.
+If `translate_output` and if `s0` was a `CodonSequence`, the output sample will contain the
+amino acid sequences and not the codons. It defaults to `false`: the output keeps the type
+that was sampled, and `PottsEvolver.translate` can be applied to it afterwards.
 
 *Note*: this function is not very efficient if `M` is small.
 
@@ -117,6 +124,8 @@ If `pack_output`, the sequences will be wrapped into a [`SequenceSample`](@ref).
 Otherwise, they are in a dictionary indexed by node label.
 If `translate_output` and if the root sequence was a `CodonSequence`, the output sample
 will contain the amino acid sequence and not the codons.
+`translate_output` defaults to `false`: the output keeps the type that was sampled, and
+`PottsEvolver.translate` can be applied to it afterwards.
 
 ## Warning
 The `Teq` field of `params` is not used in the sampling.
@@ -132,7 +141,7 @@ function mcmc_sample(
     logfile=nothing,
     logfile_verbose=1,
     pack_output=true,
-    translate_output=true,
+    translate_output=false,
     kwargs..., # init=get_init_sequence(...) here: passed to mcmc_sample_tree
 )    # one sequence per node --> two alignments as output (+ tree)
     logger = get_logger(verbose, logfile, logfile_verbose)

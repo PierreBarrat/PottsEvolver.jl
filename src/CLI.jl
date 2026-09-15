@@ -244,11 +244,10 @@ function _add_shared_args!(settings::ArgParseSettings)
                 only), compute it via `average_transition_rate` before sampling"
         action = :store_true
         "--translate"
-        help = "Forwarded as `translate_output` to `mcmc_sample`; only relevant when the \
-                initial/root sequence is a `CodonSequence`. If omitted, this command's own \
-                library default is used."
-        arg_type = Bool
-        default = nothing
+        help = "Translate the output to amino acids; only relevant when the initial/root \
+                sequence is a `CodonSequence`. Off by default: the output keeps the type \
+                that was sampled"
+        action = :store_true
     end
     return settings
 end

@@ -29,11 +29,14 @@ The accessible neighbours of a codon are all coding codons reachable by a single
 
 ```julia
 params = SamplingParameters(; sampling_type=:discrete, Teq=100)
-result = mcmc_sample(potts, 10, params; init=:random_codon, translate_output=true)
-result.sequences  # a SequenceSample holding amino acids
+result = mcmc_sample(potts, 10, params; init=:random_codon)
+result.sequences  # a SequenceSample holding codons
 ```
 
-Set `translate_output=false` to keep the output as codon sequences.
+By default the output keeps the sampled type, here codons.
+Pass `translate_output=true` (or call `translate` on the sample afterwards) to get amino
+acid sequences instead.
+This is the same for chain and tree sampling.
 
 !!! note
     Full documentation for this feature is under construction.

@@ -31,7 +31,7 @@
         @test sub["verbose"] == 0
         @test sub["log-verbose"] == 1
         @test sub["compute-omega"] == false
-        @test sub["translate"] === nothing
+        @test sub["translate"] == false
         @test sub["n-samples"] == 1
         @test sub["tvals"] == Float64[]
         @test sub["tvals-file"] === nothing
@@ -67,7 +67,6 @@
             "2",
             "--compute-omega",
             "--translate",
-            "true",
         ])
         sub = r["sample-chain"]
         @test sub["tvals"] == [0.0, 1.5, 3.0]
