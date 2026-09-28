@@ -2,10 +2,13 @@ module CLI
 
 using ArgCheck
 using ArgParse
+using Dates
 using FASTX
 using Random
+using Statistics
 using TOML
 using ..PottsEvolver
+using ..PottsEvolver: TreeTools
 
 #================================#
 ######### Parameter file #########
@@ -27,6 +30,10 @@ type = "step"
 length = "exact"
 ```
 
+A `[run]` table, as written by [`write_params`](@ref), is ignored: it holds metadata about a
+run (input files, seed, sequence type) rather than sampling parameters, so a
+`<prefix>.params.toml` written by the CLI can be given back to it unchanged.
+
 `mutation_matrix`, if given, is a nested array **of rows**: `mutation_matrix[a]` is the
 `a`-th row of the matrix, *i.e.* the relative mutation rates *out of* state `a` towards
 every other state `b` (`mutation_matrix[a][b]` becomes `μ[a, b]`).
@@ -41,7 +48,10 @@ function load_params(path::AbstractString)
 
     symbol_fields = ("sampling_type", "step_type", "step_meaning")
     for (k, v) in raw
-        if k == "branchlength_meaning"
+        if k == "run"
+            # run metadata, not sampling parameters: see the docstring
+            continue
+        elseif k == "branchlength_meaning"
             kwargs[Symbol(k)] = BranchLengthMeaning(Symbol(v["type"]), Symbol(v["length"]))
         elseif k == "mutation_matrix"
             kwargs[Symbol(k)] = permutedims(reduce(hcat, v))
@@ -188,6 +198,223 @@ function _infer_sequence_type(s::AbstractString, g::PottsGraph)
             `codon` or `rna`).
             """))
     end
+end
+
+#================================#
+############ Output ##############
+#================================#
+
+# Output files are all named `<prefix>.<suffix>` in `--outdir`, in the style of IQ-TREE.
+
+"""
+    default_prefix(prefix, model)
+
+Resolve the `--prefix` value: if not given, use `model`'s basename without its extension.
+"""
+default_prefix(prefix::AbstractString, model) = prefix
+default_prefix(::Nothing, model) = first(splitext(basename(model)))
+
+"""
+    output_file(outdir, prefix, suffix)
+
+Path to `outdir/prefix.suffix`, creating `outdir` if needed.
+Warn if the file exists: it is going to be overwritten.
+"""
+function output_file(outdir, prefix, suffix)
+    mkpath(outdir)
+    path = joinpath(outdir, "$prefix.$suffix")
+    isfile(path) && @warn "Overwriting existing output file $path"
+    return path
+end
+
+"""
+    setup_logfile(outdir, prefix, command, args) -> (path, io)
+
+Create the run's log file, write a header to it, and return its path along with the **open**
+stream, which the caller owns and has to close at the end of the run.
+
+The stream is meant to be wrapped with `PottsEvolver.file_sink` and passed to `mcmc_sample` as
+`extra_sinks`, so that the CLI and the sampling functions log to the same file through a
+*single* handle. Two handles would not do: Julia's append mode seeks to the end of the file
+when opening it and each handle then keeps its own position, so their writes would land on top
+of each other.
+"""
+function setup_logfile(outdir, prefix, command, args)
+    path = output_file(outdir, prefix, "log")
+    io = open(path, "w")
+    println(io, "# pottsevolver $(pkgversion(PottsEvolver)) - $command - $(Dates.now())")
+    println(io, "# args: $(join(args, ' '))")
+    flush(io)
+    return path, io
+end
+
+#=========== Parameters ===========#
+
+_params_pairs(p::SamplingParameters) = (f => getproperty(p, f) for f in propertynames(p))
+_params_pairs(d::AbstractDict) = (Symbol(k) => v for (k, v) in d)
+
+function _params_toml_dict(params; run=nothing)
+    out = Dict{String,Any}()
+    run_table = if isnothing(run)
+        Dict{String,Any}()
+    else
+        Dict{String,Any}(string(k) => v for (k, v) in run)
+    end
+    for (field, value) in _params_pairs(params)
+        # TOML has no null; an omitted key falls back to `SamplingParameters`'s default, which
+        # is exactly what an unset field means
+        isnothing(value) && continue
+        if field == :sequence_type
+            # not a `SamplingParameters` field: belongs to the metadata table
+            run_table["sequence_type"] = string(value)
+        elseif field == :branchlength_meaning
+            out[string(field)] = Dict(
+                "type" => string(value.type), "length" => string(value.length)
+            )
+        elseif field == :mutation_matrix
+            out[string(field)] = map(collect, eachrow(value)) # `load_params` reads rows
+        else
+            out[string(field)] = value
+        end
+    end
+    isempty(run_table) || (out["run"] = run_table)
+    return out
+end
+
+"""
+    write_params(path, params; run=nothing)
+
+Write the parameters of a run to `path` as TOML.
+`params` is either a `SamplingParameters` or the `params` field of an `mcmc_sample` output.
+
+The file can be read back by [`load_params`](@ref): fields that are `nothing` are omitted
+(`load_params` falls back to the same defaults), and anything that is not a
+`SamplingParameters` field goes to a `[run]` table that `load_params` ignores. `run` holds
+extra metadata to add there, *e.g.* the input files and the rng seed.
+"""
+function write_params(path, params; run=nothing)
+    open(path, "w") do io
+        # `Symbol` is not a valid TOML type: `string` converts it, and `sequence_type` too
+        TOML.print(string, io, _params_toml_dict(params; run); sorted=true)
+    end
+    return path
+end
+
+#=========== Substitutions ===========#
+
+"""
+    write_substitutions(path, info, tvals)
+
+Write the substitutions tracked during a continuous chain run to `path`, as a csv file with
+columns `sample,time,position,old,new`.
+
+`sample` is the time value of the sample ending the interval the substitution happened in, and
+`time` the absolute time of the substitution, counted from the start of the run (*i.e.*
+including `burnin`). `position`, `old` and `new` index states of the sampled sequence type,
+which is recorded in the `[run]` table of the parameter file.
+"""
+function write_substitutions(path, info, tvals)
+    open(path, "w") do io
+        println(io, "sample,time,position,old,new")
+        # `info[m]` covers the interval ending at `tvals[m+1]`: the first sample is the initial
+        # sequence, with nothing sampled before it
+        for (m, entry) in enumerate(info), (mutation, t) in entry.substitutions
+            println(
+                io, join((tvals[m + 1], t, mutation.pos, mutation.old, mutation.new), ',')
+            )
+        end
+    end
+    return path
+end
+
+_tracks_substitutions(params) = get(params, :track_substitutions, false)
+
+function log_info_summary(info, sampling_type)
+    isempty(info) && return nothing
+    if sampling_type == :discrete
+        @info "Average fraction of accepted steps: $(mean(x -> x.ratio, info))"
+    elseif sampling_type == :continuous
+        @info "Total number of substitutions: $(sum(x -> x.number_substitutions, info))"
+    end
+    return nothing
+end
+
+#=========== Writing a run ===========#
+
+"""
+    write_chain_output(outdir, prefix, result; run=nothing)
+
+Write the output of a chain run (`mcmc_sample(g, M, params)`) to `outdir`, and return the paths
+written:
+- `<prefix>.fasta`: the sample, labelled by sampling time;
+- `<prefix>.params.toml`: parameters of the run, see [`write_params`](@ref);
+- `<prefix>.substitutions.csv`: only if substitutions were tracked, see
+  [`write_substitutions`](@ref).
+"""
+function write_chain_output(outdir, prefix, result; run=nothing)
+    files = String[]
+
+    path = output_file(outdir, prefix, "fasta")
+    write_fasta(path, result.sequences)
+    push!(files, path)
+    @info "Wrote $(length(result.sequences)) sequences to $path"
+
+    push!(files, write_params(output_file(outdir, prefix, "params.toml"), result.params; run))
+
+    if _tracks_substitutions(result.params)
+        path = write_substitutions(
+            output_file(outdir, prefix, "substitutions.csv"), result.info, result.tvals
+        )
+        push!(files, path)
+        @info "Wrote tracked substitutions to $path"
+    end
+
+    log_info_summary(result.info, get(result.params, :sampling_type, nothing))
+    return files
+end
+
+"""
+    write_tree_output(outdir, prefix, result; run=nothing, internals=false)
+
+Write the output of a tree run (`mcmc_sample(g, tree, params)`) to `outdir`, and return the
+paths written:
+- `<prefix>.fasta`: the leaf sequences, labelled by node;
+- `<prefix>.params.toml`: parameters of the run, see [`write_params`](@ref);
+- `<prefix>.internals.fasta` and `<prefix>.nwk`: only if `internals`.
+
+The tree is written along with the internal sequences because `read_tree` labels the internal
+nodes that the input tree leaves unnamed: the output tree is the one whose labels the sequences
+refer to.
+"""
+function write_tree_output(outdir, prefix, result; run=nothing, internals=false)
+    files = String[]
+
+    path = output_file(outdir, prefix, "fasta")
+    write_fasta(path, result.leaf_sequences)
+    push!(files, path)
+    @info "Wrote $(length(result.leaf_sequences)) leaf sequences to $path"
+
+    if internals
+        path = output_file(outdir, prefix, "internals.fasta")
+        write_fasta(path, result.internal_sequences)
+        push!(files, path)
+        @info "Wrote $(length(result.internal_sequences)) internal sequences to $path"
+
+        path = output_file(outdir, prefix, "nwk")
+        TreeTools.write_newick(path, result.tree)
+        push!(files, path)
+        @info "Wrote the sampled tree to $path"
+    end
+
+    push!(files, write_params(output_file(outdir, prefix, "params.toml"), result.params; run))
+
+    if _tracks_substitutions(result.params)
+        @warn """
+        `track_substitutions` is set, but tree sampling does not return substitutions:
+        no substitution file is written.
+        """
+    end
+    return files
 end
 
 function (@main)(ARGS)

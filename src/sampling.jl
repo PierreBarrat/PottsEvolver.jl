@@ -78,9 +78,10 @@ function mcmc_sample(
     verbose=0,
     logfile=nothing,
     logfile_verbose=1,
+    extra_sinks=(),
     kwargs...,
 )
-    logger = get_logger(verbose, logfile, logfile_verbose)
+    logger = get_logger(verbose, logfile, logfile_verbose; extra_sinks)
     with_logger(logger) do
         return if params.sampling_type == :continuous
             mcmc_sample_continuous_chain(g, tvals, s0, params; kwargs...)
@@ -140,11 +141,12 @@ function mcmc_sample(
     verbose=0,
     logfile=nothing,
     logfile_verbose=1,
+    extra_sinks=(),
     pack_output=true,
     translate_output=false,
     kwargs..., # init=get_init_sequence(...) here: passed to mcmc_sample_tree
 )    # one sequence per node --> two alignments as output (+ tree)
-    logger = get_logger(verbose, logfile, logfile_verbose)
+    logger = get_logger(verbose, logfile, logfile_verbose; extra_sinks)
     with_logger(logger) do
         # Actual MCMC
         sampled_tree = if params.sampling_type == :continuous
@@ -267,26 +269,53 @@ end
 ################ Logging utils ################
 #=============================================#
 
-function get_logger(verbose, logfile, logfile_verbose)
-    function min_lvl(val)
-        return if val < 0
-            Logging.Error
-        elseif val == 0
-            Logging.Warn
-        elseif val == 1
-            Logging.Info
-        else
-            Logging.Debug
-        end
+"""
+    log_level(verbose)
+
+`LogLevel` corresponding to a verbosity: `<0` error, `0` warn, `1` info, `>=2` debug.
+"""
+function log_level(verbose)
+    return if verbose < 0
+        Logging.Error
+    elseif verbose == 0
+        Logging.Warn
+    elseif verbose == 1
+        Logging.Info
+    else
+        Logging.Debug
     end
+end
+
+"""
+    file_sink(io::IO, verbose)
+
+A logger writing to the already open stream `io` at verbosity `verbose`.
+
+Pass it in `extra_sinks` to log to a file that the *caller* owns and closes, instead of having
+[`get_logger`](@ref) open one itself through its `logfile` argument. This is the only safe way
+for several loggers to write to the same file: Julia's append mode seeks to the end of the file
+when *opening* it, and each handle then keeps its own position, so two handles onto one file
+overwrite each other's output. Sharing a single stream leaves a single position.
+"""
+file_sink(io::IO, verbose) = MinLevelLogger(FileLogger(io), log_level(verbose))
+
+"""
+    get_logger(verbose, logfile, logfile_verbose; extra_sinks=())
+
+Build a `TeeLogger` writing to the console at verbosity `verbose`, and to `logfile` (if given,
+as a path) at verbosity `logfile_verbose`. Loggers in `extra_sinks` are added to it, see
+[`file_sink`](@ref).
+"""
+function get_logger(verbose, logfile, logfile_verbose; extra_sinks=())
     loggers = []
     # console logger
-    console = MinLevelLogger(ConsoleLogger(Logging.Debug), min_lvl(verbose))
+    console = MinLevelLogger(ConsoleLogger(Logging.Debug), log_level(verbose))
     push!(loggers, console)
-    # file logger
+    # file logger - `logfile` is a path, opened (and never closed) here
     file = if !isnothing(logfile) && !isempty(logfile)
-        push!(loggers, MinLevelLogger(FileLogger(logfile), min_lvl(logfile_verbose)))
+        push!(loggers, MinLevelLogger(FileLogger(logfile), log_level(logfile_verbose)))
     end
+    append!(loggers, extra_sinks)
 
     return TeeLogger(loggers...)
 end
