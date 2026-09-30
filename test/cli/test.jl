@@ -83,3 +83,4 @@ end
 include("load_init_test.jl")
 include("parse_cli_test.jl")
 include("write_output_test.jl")
+include("main_test.jl")

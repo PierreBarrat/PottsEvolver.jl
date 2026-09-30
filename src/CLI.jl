@@ -4,6 +4,7 @@ using ArgCheck
 using ArgParse
 using Dates
 using FASTX
+using Logging
 using Random
 using Statistics
 using TOML
@@ -417,13 +418,258 @@ function write_tree_output(outdir, prefix, result; run=nothing, internals=false)
     return files
 end
 
-function (@main)(ARGS)
-    parsed_args = parse_cli(ARGS)
-    println("Parsed args:")
-    for (arg,val) in parsed_args
-        println("  $arg  =>  $val")
+#================================#
+######### Running a command ######
+#================================#
+
+"""
+    load_tvals(path)
+
+Read an explicit sampling schedule from `path`: one number per line.
+Blank lines, and lines whose first non-space character is `#`, are skipped.
+"""
+function load_tvals(path::AbstractString)
+    tvals = Float64[]
+    for (n, line) in enumerate(eachline(path))
+        stripped = strip(line)
+        (isempty(stripped) || startswith(stripped, '#')) && continue
+        value = tryparse(Float64, stripped)
+        isnothing(value) && throw(
+            ArgumentError("$path, line $n: expected a number, got `$stripped`")
+        )
+        push!(tvals, value)
     end
-    return nothing
+    return tvals
+end
+
+"""
+    sampling_schedule(n_samples, tvals, tvals_file, params)
+
+Resolve `-M`/`--tvals`/`--tvals-file` into the second argument of `mcmc_sample`: an `Integer`
+number of samples, or a vector of times.
+
+The three are mutually exclusive - giving more than one is an error rather than a silent
+precedence, since they describe the same thing in incompatible ways. `-M` defaults to
+`nothing` for this reason: it is what tells an explicit `-M 1` from no `-M` at all.
+
+An explicit schedule is converted to the element type the sampling type needs: `Float64` for
+`:continuous`, `Int` for `:discrete`, which counts steps and therefore rejects a schedule that
+is not whole-numbered.
+"""
+function sampling_schedule(n_samples, tvals, tvals_file, params)
+    given = filter(
+        !isnothing,
+        [
+            isnothing(n_samples) ? nothing : "-M",
+            isempty(tvals) ? nothing : "--tvals",
+            isnothing(tvals_file) ? nothing : "--tvals-file",
+        ],
+    )
+    @argcheck length(given) <= 1 """
+    $(join(given, ", ")) are mutually exclusive: they all set the sampling schedule.
+    Keep only one of them.
+    """
+
+    explicit = if !isempty(tvals)
+        tvals
+    elseif !isnothing(tvals_file)
+        load_tvals(tvals_file)
+    else
+        return something(n_samples, 1)
+    end
+    return _convert_tvals(explicit, params.sampling_type)
+end
+
+function _convert_tvals(tvals, sampling_type)
+    sampling_type == :continuous && return Float64.(tvals)
+    # discrete sampling counts mcmc steps
+    fractional = filter(!isinteger, tvals)
+    @argcheck isempty(fractional) """
+    Discrete sampling counts steps: values in --tvals/--tvals-file must be whole numbers.
+    Instead $(fractional)
+    """
+    return Int.(tvals)
+end
+
+"""
+    resolve_seed(seed) -> (seed, rng)
+
+Return the rng seed to use and an rng seeded with it. If `seed` is `nothing`, one is drawn
+from `RandomDevice`, so that a run is reproducible from the seed recorded in its output even
+when `--seed` was not given. A local rng is returned rather than seeding the global one.
+"""
+function resolve_seed(seed::Union{Nothing,Integer})
+    seed = isnothing(seed) ? rand(Random.RandomDevice(), UInt32) : seed
+    return seed, Random.Xoshiro(seed)
+end
+
+"""
+    compute_omega!(params, g, s0; rng, progress_meter)
+
+Set `params.substitution_rate` to `average_transition_rate(g, params.step_type, s0)`, for
+`--compute-omega`.
+
+Does nothing if the parameter file already provides a rate: the file stays authoritative and
+the flag is only a convenience for not having to compute `Ω` beforehand.
+"""
+function compute_omega!(params, g, s0; rng=Random.default_rng(), progress_meter=true)
+    if !isnothing(params.substitution_rate)
+        @warn """
+        --compute-omega ignored: `substitution_rate` is already set to \
+        $(params.substitution_rate) in the parameter file.
+        """
+        return params
+    end
+    @info "Computing the average substitution rate Ω..."
+    params.substitution_rate = PottsEvolver.average_transition_rate(
+        g, params.step_type, s0; rng, progress_meter, params=nothing
+    )
+    @info "Ω = $(params.substitution_rate)"
+    return params
+end
+
+# Metadata recorded in the `[run]` table of `<prefix>.params.toml`, alongside the parameters.
+function run_metadata(args, seed)
+    return Dict{Symbol,Any}(
+        :version => string(pkgversion(PottsEvolver)),
+        :model => args["model"],
+        :init => args["init"],
+        :seed => Int(seed),
+    )
+end
+
+# Shared by both subcommands: everything between parsing and calling `mcmc_sample`.
+function setup_run(args)
+    seed, rng = resolve_seed(args["seed"])
+    @info "Using rng seed $seed"
+
+    @info "Reading Potts model from $(args["model"])"
+    g = read_graph(args["model"])
+
+    @info "Reading parameters from $(args["params"])"
+    params = load_params(args["params"])
+
+    @info "Building the initial sequence from `$(args["init"])`"
+    s0 = load_init(args["init"], args["init-type"], g; rng)
+
+    args["compute-omega"] && compute_omega!(
+        params, g, s0; rng, progress_meter=args["verbose"] >= 1
+    )
+
+    return (; g, params, s0, rng, seed)
+end
+
+# `--translate` is a flag, so it is only forwarded when set: leaving it out keeps
+# `mcmc_sample`'s own default, which is the same (`false`) for chains and trees.
+_translate_kwargs(args) = args["translate"] ? (; translate_output=true) : (;)
+
+function run_chain(args, sink)
+    (; g, params, s0, rng, seed) = setup_run(args)
+    schedule = sampling_schedule(
+        args["n-samples"], args["tvals"], args["tvals-file"], params
+    )
+
+    result = mcmc_sample(
+        g,
+        schedule,
+        s0,
+        params;
+        rng,
+        verbose=args["verbose"],
+        extra_sinks=(sink,),
+        progress_meter=args["verbose"] >= 1,
+        _translate_kwargs(args)...,
+    )
+
+    return write_chain_output(
+        args["outdir"],
+        default_prefix(args["prefix"], args["model"]),
+        result;
+        run=run_metadata(args, seed),
+    )
+end
+
+function run_tree(args, sink)
+    (; g, params, s0, rng, seed) = setup_run(args)
+
+    @info "Reading tree from $(args["tree"])"
+    result = mcmc_sample(
+        g,
+        read_tree(args["tree"]),
+        params;
+        init=s0,
+        rng,
+        verbose=args["verbose"],
+        extra_sinks=(sink,),
+        _translate_kwargs(args)...,
+    )
+
+    metadata = run_metadata(args, seed)
+    metadata[:tree] = args["tree"]
+    return write_tree_output(
+        args["outdir"],
+        default_prefix(args["prefix"], args["model"]),
+        result;
+        run=metadata,
+        internals=args["internals"],
+    )
+end
+
+# Errors a user can cause: reported as a message, without a stacktrace. Anything else is a bug
+# and is rethrown.
+const _USER_ERRORS = Union{ArgumentError,SystemError,ArgParse.ArgParseError,KeyError}
+
+"""
+    (@main)(ARGS)
+
+Entry point of the `pottsevolver` app. Return value is the process exit code: `0` on success,
+`1` for an error caused by the input (bad file, invalid parameters, conflicting flags).
+"""
+function (@main)(ARGS)
+    parsed = try
+        parse_cli(ARGS)
+    catch err
+        err isa _USER_ERRORS || rethrow()
+        println(stderr, "pottsevolver: $(sprint(showerror, err))")
+        return 1
+    end
+
+    command = parsed["%COMMAND%"]
+    args = parsed[command]
+
+    prefix = default_prefix(args["prefix"], args["model"])
+    logpath, io = setup_logfile(args["outdir"], prefix, command, ARGS)
+    # one sink for the whole run: the CLI and `mcmc_sample` share this single handle
+    sink = PottsEvolver.file_sink(io, args["log-verbose"])
+    logger = PottsEvolver.get_logger(
+        args["verbose"], nothing, args["log-verbose"]; extra_sinks=(sink,)
+    )
+
+    return try
+        with_logger(logger) do
+            try
+                if command == "sample-chain"
+                    run_chain(args, sink)
+                else
+                    run_tree(args, sink)
+                end
+                @info "Done. Log written to $logpath"
+                return 0
+            catch err
+                if !(err isa _USER_ERRORS)
+                    # not the user's fault: keep the stacktrace
+                    @error "pottsevolver failed - this is likely a bug" exception =
+                        (err, catch_backtrace())
+                    rethrow()
+                end
+                # `@error` reaches both the console and the log file, so one message is enough
+                @error "pottsevolver failed: $(sprint(showerror, err))"
+                return 1
+            end
+        end
+    finally
+        close(io)
+    end
 end
 
 #================================#
@@ -505,9 +751,10 @@ function parse_cli(args)
     _add_shared_args!(settings["sample-chain"])
     @add_arg_table! settings["sample-chain"] begin
         "-M", "--n-samples"
-        help = "Number of samples taken along the chain (spaced by `Teq`, per --params)"
+        help = "Number of samples taken along the chain (spaced by `Teq`, per --params). \
+                Defaults to 1, and is mutually exclusive with --tvals/--tvals-file"
         arg_type = Int
-        default = 1
+        default = nothing # `nothing` means 1: it tells an explicit `-M 1` from no `-M` at all
         "--tvals"
         help = "Explicit sampling schedule (space-separated numbers), bypassing -M/Teq. \
                 The first value is the burn-in time; later values are absolute \

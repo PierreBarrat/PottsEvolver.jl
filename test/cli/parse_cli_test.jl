@@ -32,7 +32,8 @@
         @test sub["log-verbose"] == 1
         @test sub["compute-omega"] == false
         @test sub["translate"] == false
-        @test sub["n-samples"] == 1
+        # `nothing`, not 1: it distinguishes an explicit `-M 1` from no `-M`
+        @test sub["n-samples"] === nothing
         @test sub["tvals"] == Float64[]
         @test sub["tvals-file"] === nothing
     end
