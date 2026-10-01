@@ -93,7 +93,7 @@ write("path/to/output.txt", g; sigdigits=5, index_style=1)
 The `energy` function calculates the statistical energy of a sequence. 
 
 ```@repl pottsgraph_1
-seq = AASequence(map(aa_alphabet, collect("ACDEFGHIKLMNPQRSTVWY")))
+seq = AASequence(map(aa_alphabet, collect("ACDEFGHIKL"))) # L = 10 characters
 E = energy(seq, g_rand)
 ```
 

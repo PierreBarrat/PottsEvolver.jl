@@ -115,7 +115,7 @@ If nodes are not labeled in the input tree, they are automatically assigned labe
 ```@repl sampling_1
 result.internal_sequences
 result.leaf_sequences
-result.leaf_sequences.names
+result.leaf_sequences.labels
 ```
 Alternatively, sequences can be stored in dictionaries indexed by node labels: 
 ```@repl sampling_1
@@ -174,7 +174,7 @@ end
 Ω_2 = let
     # call the average_transition_rate function directly, which will sample the potts model
     s0 = AASequence(L)
-    PottsEvolver.average_transition_rate(g, step_type, s0; n_samples, Teq)
+    PottsEvolver.average_transition_rate(g, step_type, s0; n_samples)
 end
 ```
 
