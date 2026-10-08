@@ -278,6 +278,51 @@ end
         end
     end
 
+    @testset "the quick start documented in docs/src/cli.md" begin
+        # Mirrors the "Quick start" section: Documenter does not run ```sh blocks, so this
+        # testset is what keeps that page honest. Update both together.
+        mktempdir() do dir
+            model = joinpath(dir, "model.dat")
+            PottsEvolver.write(model, PottsGraph(4, 21; init=:rand))
+            paramfile = joinpath(dir, "params.toml")
+            write(
+                paramfile,
+                """
+                sampling_type = "discrete"
+                step_type = "gibbs"
+                Teq = 50
+                burnin = 100
+                """,
+            )
+            results = joinpath(dir, "results")
+
+            # `pottsevolver sample-chain model.dat -p params.toml -o results -M 100`
+            @test CLI.main([
+                "sample-chain",
+                model,
+                "-p",
+                paramfile,
+                "-o",
+                results,
+                "-M",
+                "100",
+                "--verbose=-1",
+            ]) == 0
+
+            # the three files the page says appear, named after the model file
+            @test Set(readdir(results)) ==
+                Set(["model.fasta", "model.params.toml", "model.log"])
+            @test length(fasta_labels(joinpath(results, "model.fasta"))) == 100
+
+            # and the [run] table the Reproducibility section shows
+            run_table = TOML.parsefile(joinpath(results, "model.params.toml"))["run"]
+            @test issetequal(
+                keys(run_table), ["init", "model", "seed", "sequence_type", "version"]
+            )
+            @test run_table["version"] == string(pkgversion(PottsEvolver))
+        end
+    end
+
     @testset "--compute-omega fills in the missing rate" begin
         mktempdir() do dir
             model, _ = setup(dir)
