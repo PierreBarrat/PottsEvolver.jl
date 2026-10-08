@@ -31,12 +31,12 @@ function mcmc_sample_continuous_tree(
     params::SamplingParameters;
     init=:random_num,
     rng=Random.default_rng(),
+    burnin=params.burnin,
     kwargs...,
 )
     # Pick initial sequence
     s0 = get_init_sequence(init, g; rng)
     # If burnin, then equilibrate the picked sequence first
-    @unpack burnin = params
     if burnin > 0
         @info "Equilibrating root sequence with $(burnin) burnin steps... "
         gibbs_holder = get_gibbs_holder(s0)
@@ -84,10 +84,6 @@ function mcmc_sample_continuous_tree!(
             - step style = $(params.step_type)
         """
     end
-
-    @unpack Teq, burnin = params
-    Teq > 0 && @info "Sampling on a tree: `Teq` field in parameters is ignored" Teq
-    burnin > 0 && @info "`burnin` parameter ignored in this specialized function" burnin
 
     # Setting the CTMCState
     rootseq = data(root(tree)).seq
@@ -149,12 +145,12 @@ function mcmc_sample_tree(
     params::SamplingParameters;
     init=:random_num,
     rng=Random.default_rng(),
+    burnin=params.burnin,
     kwargs...,
 )
     # Pick initial sequence
     s0 = get_init_sequence(init, g; rng)
     # If burnin, then equilibrate the picked sequence first
-    @unpack burnin = params
     if burnin > 0
         @info "Equilibrating root sequence with $(burnin) burnin steps... "
         gibbs_holder = get_gibbs_holder(s0)
@@ -207,9 +203,6 @@ function mcmc_sample_tree!(
             - branch length meaning = $(params.branchlength_meaning)
         """
     end
-
-    @unpack Teq, burnin = params
-    Teq > 0 && @info "Sampling on a tree: `Teq` field in parameters is ignored" Teq
 
     # some settings
     gibbs_holder = get_gibbs_holder(data(root(tree)).seq)

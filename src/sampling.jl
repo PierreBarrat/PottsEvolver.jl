@@ -41,13 +41,20 @@ it is used if `init::CodonSequence`, otherwise not.
 """
 function mcmc_sample end
 
-function mcmc_sample(g::PottsGraph, M::Integer, s0::AbstractSequence, params; kwargs...)
+function mcmc_sample(
+    g::PottsGraph,
+    M::Integer,
+    s0::AbstractSequence,
+    params;
+    spacing=params.Teq,
+    burnin=params.burnin,
+    kwargs...,
+)
     @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
 
-    @unpack Teq, burnin = params
-    @argcheck Teq >= 0 && burnin >= 0
-    tvals = if Teq > 0
-        burnin .+ range(0, (M - 1) * Teq; step=Teq)
+    @argcheck spacing >= 0 && burnin >= 0
+    tvals = if spacing > 0
+        burnin .+ range(0, (M - 1) * spacing; step=spacing)
     else
         burnin .+ zeros(Int, M)
     end
