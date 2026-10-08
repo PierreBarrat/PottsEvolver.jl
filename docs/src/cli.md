@@ -122,8 +122,10 @@ Both commands take these:
 | `--compute-omega` | off | Compute `substitution_rate` when the parameter file omits it |
 | `--translate` | off | Write amino acids instead of codons, for a `CodonSequence` run |
 
-`sample-chain` additionally takes the sampling schedule, in one of three mutually exclusive
-ways, see [`sample-chain`](@ref):
+`sample-chain` additionally takes the sampling schedule, either by describing it with
+`-M`/`--spacing`/`--burnin`, or by giving the times outright with `--tvals`/`--tvals-file`.
+The two cannot be combined, and either can also come from the parameter file - see
+[`sample-chain`](@ref):
 
 | Option | Default | Description |
 |--------|---------|-------------|
