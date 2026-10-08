@@ -111,7 +111,7 @@ function aa_gibbs_step!(
 
     if isnothing(new_aas)
         # no valid mutation was found - likely due to all gaps sequence
-        return (i=i, new_state=s[i], accepted=accepted, changed=false)
+        return (i=i, new_state=s[i], accepted=false, changed=false)
     end
 
     # Constructing the gibbs field p
