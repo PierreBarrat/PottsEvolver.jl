@@ -90,6 +90,7 @@ function mcmc_sample(
 )
     logger = get_logger(verbose, logfile, logfile_verbose; extra_sinks)
     with_logger(logger) do
+        warn_repeated_times(tvals)
         return if params.sampling_type == :continuous
             mcmc_sample_continuous_chain(g, tvals, s0, params; kwargs...)
         elseif params.sampling_type == :discrete
@@ -330,6 +331,25 @@ end
 #=====================#
 ######## Utils ########
 #=====================#
+
+"""
+    warn_repeated_times(tvals)
+
+Warn if a sampling schedule asks for several samples at the same time.
+
+No mcmc step happens between two samples taken at the same time, so they come out as identical
+sequences. The usual cause is a `spacing` of 0, which is still the default: it is a valid
+request (*e.g.* `M` copies of the initial sequence) but rarely what is wanted.
+"""
+function warn_repeated_times(tvals)
+    repeats = length(tvals) - length(unique(tvals))
+    repeats > 0 && @warn """
+    The sampling schedule asks for the same time more than once ($repeats repeated value(s)).
+    No mcmc step happens between samples taken at the same time, so the corresponding
+    sequences will be identical. Use a non-zero `spacing`, or pass distinct sampling times.
+    """
+    return nothing
+end
 
 function return_params(p::SamplingParameters, ::T) where {T<:AbstractSequence}
     d = Dict()

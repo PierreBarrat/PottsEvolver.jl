@@ -347,3 +347,20 @@ end
         @test all(eltype(chain) <: NumSequence for chain in result)
     end
 end
+
+@testset "warn_repeated_times" begin
+    # no mcmc step happens between samples at the same time: they come out identical
+    @test_logs (:warn,) match_mode = :any PottsEvolver.warn_repeated_times([5, 5, 5])
+    @test_logs (:warn,) match_mode = :any PottsEvolver.warn_repeated_times([0, 2, 2, 4])
+    @test_logs min_level = Logging.Warn PottsEvolver.warn_repeated_times([0, 2, 4])
+    @test_logs min_level = Logging.Warn PottsEvolver.warn_repeated_times([3])
+    @test_logs min_level = Logging.Warn PottsEvolver.warn_repeated_times(Float64[])
+
+    # which is what a `spacing` of 0 produces, the default
+    g = PottsGraph(5, 21; init=:rand)
+    params = SamplingParameters(; sampling_type=:discrete, Teq=0, burnin=1)
+    result = mcmc_sample(
+        g, 3, AASequence(5), params; verbose=-1, progress_meter=false
+    )
+    @test allequal(eachcol(result.sequences.data))
+end
