@@ -260,15 +260,15 @@ function average_transition_rate(
     rng=Random.default_rng(),
     progress_meter=true,
     params=nothing,
+    spacing=10 * size(g).L,
     n_samples=250,
 )
     if isnothing(params)
-        Teq = 10 * size(g).L
-        params = SamplingParameters(; sampling_type=:discrete, Teq)
+        params = SamplingParameters(; sampling_type=:discrete)
     end
 
     sample_eq = mcmc_sample(
-        g, n_samples, params; pack_output=false, init=s0, rng, progress_meter
+        g, n_samples, params; spacing, pack_output=false, init=s0, rng, progress_meter
     )
     sample_eq = sample_eq.sequences
     return average_transition_rate(

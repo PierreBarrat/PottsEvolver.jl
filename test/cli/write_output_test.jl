@@ -1,8 +1,6 @@
 using TOML
 import TreeTools.Generate: balanced_binary_tree
 
-const CLI = PottsEvolver.CLI
-
 function fasta_labels(file)
     return map(l -> chop(l; head=1, tail=0), filter(startswith('>'), readlines(file)))
 end
@@ -18,8 +16,6 @@ end
         params = SamplingParameters(;
             sampling_type=:continuous,
             step_type=:glauber,
-            Teq=1.5,
-            burnin=3.0,
             substitution_rate=2.5,
             track_substitutions=true,
             mutation_matrix=[0 2 3; 1 0 1; 1 5 0],
@@ -45,7 +41,7 @@ end
     end
 
     @testset "fields that are nothing are omitted" begin
-        params = SamplingParameters(; Teq=2) # substitution_rate, mutation_matrix unset
+        params = SamplingParameters() # substitution_rate, mutation_matrix unset
         mktempdir() do dir
             path = CLI.write_params(joinpath(dir, "run.params.toml"), params)
             raw = TOML.parsefile(path)
@@ -57,7 +53,7 @@ end
     end
 
     @testset "sequence_type goes to [run], which load_params ignores" begin
-        params = SamplingParameters(; Teq=2)
+        params = SamplingParameters()
         s0 = AASequence(5)
         mktempdir() do dir
             path = CLI.write_params(
@@ -92,9 +88,10 @@ end
     g = PottsGraph(L, q; init=:rand)
 
     @testset "discrete" begin
-        params = SamplingParameters(; Teq=2, burnin=1)
+        params = SamplingParameters()
         result = mcmc_sample(
-            g, 4, params; init=:random_aa, verbose=-1, progress_meter=false
+            g, 4, params; spacing=2, burnin=1, init=:random_aa, verbose=-1,
+            progress_meter=false,
         )
         mktempdir() do dir
             files = CLI.write_chain_output(dir, "run", result)
@@ -113,13 +110,12 @@ end
         params = SamplingParameters(;
             sampling_type=:continuous,
             step_type=:glauber,
-            Teq=0.5,
-            burnin=0.1,
             substitution_rate=1.0,
             track_substitutions=true,
         )
         result = mcmc_sample(
-            g, 3, params; init=:random_aa, verbose=-1, progress_meter=false
+            g, 3, params; spacing=0.5, burnin=0.1, init=:random_aa, verbose=-1,
+            progress_meter=false,
         )
         mktempdir() do dir
             files = CLI.write_chain_output(dir, "run", result)
@@ -131,9 +127,9 @@ end
     end
 
     @testset "existing files are overwritten with a warning" begin
-        params = SamplingParameters(; Teq=2)
+        params = SamplingParameters()
         result = mcmc_sample(
-            g, 3, params; init=:random_aa, verbose=-1, progress_meter=false
+            g, 3, params; spacing=2, init=:random_aa, verbose=-1, progress_meter=false
         )
         mktempdir() do dir
             CLI.write_chain_output(dir, "run", result)
@@ -146,8 +142,8 @@ end
 @testset "write_tree_output" begin
     g = PottsGraph(5, 21; init=:rand)
     tree = balanced_binary_tree(8, 1.0)
-    params = SamplingParameters(; Teq=1, burnin=1)
-    result = mcmc_sample(g, tree, params; init=:random_aa, verbose=-1)
+    params = SamplingParameters()
+    result = mcmc_sample(g, tree, params; burnin=1, init=:random_aa, verbose=-1)
 
     @testset "leaves only" begin
         mktempdir() do dir
@@ -191,7 +187,7 @@ end
 
 @testset "log file shared by the CLI and mcmc_sample" begin
     g = PottsGraph(5, 21; init=:rand)
-    params = SamplingParameters(; Teq=2, burnin=1)
+    params = SamplingParameters()
     mktempdir() do dir
         logpath, io = CLI.setup_logfile(dir, "run", "sample-chain", ["graph.dat", "-p"])
         @test logpath == joinpath(dir, "run.log")
@@ -204,6 +200,8 @@ end
                 g,
                 3,
                 params;
+                spacing=2,
+                burnin=1,
                 init=:random_aa,
                 verbose=-1,
                 extra_sinks=(sink,),

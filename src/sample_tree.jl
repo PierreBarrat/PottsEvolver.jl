@@ -21,8 +21,8 @@ Return a sampled copy `tree`.
 - If `rootseq` is supplied, use it as the root of the tree.
 - If not, then the `init` kwarg will be used, see `PottsEvolver.get_init_sequence` to
   pick a root sequence.
-  The field `params.burnin` is used to perform initial equilibration of the
-  root sequence (useful if *e.g.* `init=:random_codon`).
+  The `burnin` kwarg (default 0) is a number of mcmc steps used to equilibrate the
+  root sequence before sampling (useful if *e.g.* `init=:random_codon`).
   The code then falls back on the first form.
 """
 function mcmc_sample_continuous_tree(
@@ -31,7 +31,7 @@ function mcmc_sample_continuous_tree(
     params::SamplingParameters;
     init=:random_num,
     rng=Random.default_rng(),
-    burnin=params.burnin,
+    burnin=0,
     kwargs...,
 )
     # Pick initial sequence
@@ -135,8 +135,8 @@ Return a sampled copy `tree`.
 - If `rootseq` is supplied, use it as the root of the tree.
 - If not, then the `init` kwarg will be used, see `PottsEvolver.get_init_sequence` to
   pick a root sequence.
-  The field `params.burnin` is used to perform initial equilibration of the
-  root sequence (useful if *e.g.* `init=:random_codon`).
+  The `burnin` kwarg (default 0) is a number of mcmc steps used to equilibrate the
+  root sequence before sampling (useful if *e.g.* `init=:random_codon`).
   The code then falls back on the first form.
 """
 function mcmc_sample_tree(
@@ -145,7 +145,7 @@ function mcmc_sample_tree(
     params::SamplingParameters;
     init=:random_num,
     rng=Random.default_rng(),
-    burnin=params.burnin,
+    burnin=0,
     kwargs...,
 )
     # Pick initial sequence

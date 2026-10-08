@@ -5,6 +5,7 @@
 """
     mcmc_sample(
         g::PottsGraph, M::Integer, s0::AbstractSequence, params::SamplingParameters;
+        spacing=0, burnin=5*spacing,
         rng=Random.GLOBAL_RNG, verbose=0, progress_meter=true, pack_output=true,
         translate_output=false,
     )
@@ -13,18 +14,25 @@
     )
     mcmc_sample(g, tvals::AbstractVector, s0, params::SamplingParameters; kwargs...)
 
-First form: sample `g` for `M` steps starting from sequence `s0`, using parameters in `params`.
+First form: take `M` samples of `g` starting from sequence `s0`, using parameters in `params`.
+Samples are `spacing` apart, and the first one is taken after `burnin`.
 Return value: named tuple with fields
 - `sequences`: a [`SequenceSample`](@ref), or a vector of sequences if `pack_output=false`
-- `tvals`: vector with the number of steps at each sample
+- `tvals`: vector with the time (number of steps, if discrete) at each sample
 - `info`: information about the run
 - `params`: parameters of the run.
 
 Second form: same, but initial sequence is provided through the `init` kwarg.
 See `?get_init_sequence` for details on how the initial sequence is determined from `init`.
 
-Third form: provide a set of times `tvals` at which samples are taken. Can also be used
-with the `init` kwarg.
+Third form: give the sampling times explicitly instead of `M`/`spacing`/`burnin`. The first
+value of `tvals` acts as the burn-in, and the following ones are absolute times, not gaps:
+any `AbstractVector` will do, so `range`, `logrange` or a hand-written vector all work. Can
+also be used with the `init` kwarg.
+
+The schedule is *not* part of `params`: `SamplingParameters` describes how a step is taken,
+while `spacing`/`burnin`/`tvals` say when samples are taken. For `:discrete` sampling, times
+are numbers of mcmc steps and must be whole numbers.
 
 
 If `pack_output`, the sequences are wrapped into a [`SequenceSample`](@ref), otherwise
@@ -46,17 +54,24 @@ function mcmc_sample(
     M::Integer,
     s0::AbstractSequence,
     params;
-    spacing=params.Teq,
-    burnin=params.burnin,
+    spacing=0,
+    burnin=5 * spacing,
     kwargs...,
 )
     @argcheck M > 0 "Number of samples `M` must be >0. Instead $M"
 
     @argcheck spacing >= 0 && burnin >= 0
+    if params.sampling_type == :discrete
+        @argcheck isinteger(spacing) && isinteger(burnin) """
+        For :discrete mcmc, `spacing` and `burnin` are numbers of steps and must be integers.
+        Instead $spacing and $burnin.
+        """
+        spacing, burnin = Int(spacing), Int(burnin)
+    end
     tvals = if spacing > 0
         burnin .+ range(0, (M - 1) * spacing; step=spacing)
     else
-        burnin .+ zeros(Int, M)
+        burnin .+ zeros(typeof(burnin), M)
     end
     if params.sampling_type == :continuous
         tvals = Float64.(tvals)
@@ -92,9 +107,9 @@ function mcmc_sample(
     with_logger(logger) do
         warn_repeated_times(tvals)
         return if params.sampling_type == :continuous
-            mcmc_sample_continuous_chain(g, tvals, s0, params; kwargs...)
+            mcmc_sample_continuous_chain(g, Float64.(tvals), s0, params; kwargs...)
         elseif params.sampling_type == :discrete
-            mcmc_sample_chain(g, tvals, s0, params; kwargs...)
+            mcmc_sample_chain(g, discrete_times(tvals), s0, params; kwargs...)
         else
             throw(ArgumentError("Invalid sampling type: $(params.sampling_type)"))
         end
@@ -158,10 +173,8 @@ function mcmc_sample(
     with_logger(logger) do
         # Actual MCMC
         sampled_tree = if params.sampling_type == :continuous
-            params = convert(SamplingParameters{FloatType}, params)
             mcmc_sample_continuous_tree(g, tree, params; kwargs...)
         elseif params.sampling_type == :discrete
-            params = convert(SamplingParameters{Int}, params)
             mcmc_sample_tree(g, tree, params; kwargs...)
         else
             throw(ArgumentError("Invalid sampling type: $(params.sampling_type)"))
@@ -331,6 +344,24 @@ end
 #=====================#
 ######## Utils ########
 #=====================#
+
+"""
+    discrete_times(tvals)
+
+Convert a sampling schedule to integers, for discrete sampling.
+
+Discrete time is a number of mcmc steps, so the schedule has to be whole numbers - and
+`mcmc_sample_chain` dispatches on `AbstractVector{<:Integer}`, which would otherwise turn a
+`Float64` schedule into a `MethodError` rather than a usable message.
+"""
+function discrete_times(tvals)
+    fractional = filter(!isinteger, tvals)
+    @argcheck isempty(fractional) """
+    For :discrete mcmc, sampling times are numbers of steps and must be whole numbers.
+    Instead got $(fractional).
+    """
+    return map(Int, tvals)
+end
 
 """
     warn_repeated_times(tvals)

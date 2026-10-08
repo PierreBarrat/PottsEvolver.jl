@@ -1,3 +1,5 @@
+const CLI = PottsEvolver.CLI
+
 function params_fields_equal(p, q)
     return all(f -> getproperty(p, f) == getproperty(q, f), propertynames(p))
 end
@@ -5,10 +7,10 @@ end
 @testset "load_params" begin
     @testset "defaults for omitted fields" begin
         mktemp() do path, io
-            write(io, "Teq = 5\n")
+            write(io, "step_meaning = \"changed\"\n")
             close(io)
             p = PottsEvolver.CLI.load_params(path)
-            @test params_fields_equal(p, SamplingParameters(; Teq=5))
+            @test params_fields_equal(p, SamplingParameters(; step_meaning=:changed))
         end
     end
 
@@ -19,8 +21,6 @@ end
                 """
                 sampling_type = "discrete"
                 step_type = "gibbs"
-                Teq = 4
-                burnin = 10
                 step_meaning = "changed"
                 fraction_gap_step = 0.8
 
@@ -34,8 +34,6 @@ end
             expected = SamplingParameters(;
                 sampling_type=:discrete,
                 step_type=:gibbs,
-                Teq=4,
-                burnin=10,
                 step_meaning=:changed,
                 fraction_gap_step=0.8,
                 branchlength_meaning=BranchLengthMeaning(:sweep, :poisson),
@@ -51,7 +49,6 @@ end
                 """
                 sampling_type = "continuous"
                 step_type = "glauber"
-                Teq = 1.0
                 substitution_rate = 12.3
                 mutation_matrix = [[0, 2, 3], [1, 0, 1], [1, 5, 0]]
                 """,
@@ -62,6 +59,43 @@ end
             @test p.mutation_matrix == [0 2 3; 1 0 1; 1 5 0]
             @test p.mutation_matrix isa Matrix{Float64}
             @test p.substitution_rate == 12.3
+        end
+    end
+
+    @testset "the schedule is not a sampling parameter" begin
+        # `[run]` and `[schedule]` are metadata and schedule, not parameters
+        mktemp() do path, io
+            write(
+                io,
+                """
+                step_meaning = "changed"
+
+                [run]
+                seed = 42
+
+                [schedule]
+                spacing = 10
+                n_samples = 3
+                """,
+            )
+            close(io)
+            p = PottsEvolver.CLI.load_params(path)
+            @test params_fields_equal(p, SamplingParameters(; step_meaning=:changed))
+        end
+
+        # the old keys are rejected with a message naming where they went
+        for key in ("Teq", "burnin")
+            mktemp() do path, io
+                write(io, "$key = 5\n")
+                close(io)
+                err = try
+                    PottsEvolver.CLI.load_params(path)
+                catch e
+                    e
+                end
+                @test err isa ArgumentError
+                @test occursin("[schedule]", err.msg)
+            end
         end
     end
 
@@ -82,5 +116,6 @@ end
 
 include("load_init_test.jl")
 include("parse_cli_test.jl")
+include("schedule_test.jl")
 include("write_output_test.jl")
 include("main_test.jl")

@@ -74,12 +74,14 @@ end
 """
     mutable struct SamplingParameters
 
+`SamplingParameters` describes *how* an mcmc step is taken. *When* samples are taken is not
+part of it: the sampling schedule is given to `mcmc_sample` directly, as a number of samples
+with a `spacing` and a `burnin`, or as an explicit vector of times. See `?mcmc_sample`.
+
 Construct using keyword arguments:
 ```
 sampling_type::Symbol = :discrete
 step_type::Symbol = :gibbs
-Teq::Real = 0 # time between samples, for chain
-burnin::Real = 5*Teq # time before first sample
 step_meaning::Symbol = :accepted # relevant for :discrete
 fraction_gap_step::Float64 = 0.9 # relevant for :discrete and codon sampling
 branchlength_meaning::BranchLengthMeaning # relevant for :discrete and sampling on a tree
@@ -89,14 +91,13 @@ mutation_matrix::Union{Nothing,Matrix{Float64}} = nothing # relevant for :contin
 ```
 
 `sampling_type` can be `:discrete` or `:continuous`.
-The time between samples is `Teq`, and an extra time `burnin` is taken before the first sample.
 Allowed values of `step_type` differ between the continuous and discrete cases.
 
 ## Discrete sampling
-- `Teq` is measured in swaps: accepted (or attempted) changes of one sequence position.
-  It must be an integer.
-- `burnin`: number of steps starting from the initial sequence before the first sample.
-  Must be an integer.
+
+Time is measured in swaps: accepted (or attempted) changes of one sequence position. Sampling
+times must therefore be integers.
+
 - `step_type`: `:gibbs` only. I intend to implement `:metropolis` and maybe `:glauber`.
 - `step_meaning` (:discrete only): whether a swap count towards equilibration or not.
   It can take three values
@@ -116,10 +117,10 @@ Allowed values of `step_type` differ between the continuous and discrete cases.
 ## Continuous sampling
 
 For continuous sampling, there is no notion of swap/sweep or of accepted/rejected steps.
-Since any positive real number is acceptable as a sampling time, branch lenghts of trees
-can be used directly.
 
-- `Teq` and `burnin` are floats.
+Any positive real number is a valid sampling time, so branch lengths of trees can be used
+directly.
+
 - `step_type` can be `:metropolis`, `:glauber`, `:sqrt`, `:gibbs` or `:mutsel`.
 - `substitution_rate` is the average substitution rate `Ω` for a given Potts model
   (the average runs over sequences).
@@ -140,11 +141,9 @@ can be used directly.
   mutation-selection balance. `μ` is only used for continuous sampling.
 
 """
-@kwdef mutable struct SamplingParameters{T<:Real}
+@kwdef mutable struct SamplingParameters
     sampling_type::Symbol = :discrete
     step_type::Symbol = (sampling_type == :discrete ? :gibbs : :glauber)
-    Teq::T = Int(0)
-    burnin::T = 5 * Teq
     # for discrete sampling only
     step_meaning::Symbol = :accepted
     # for the discrete codon algorithm (Gibbs for aa and Metropolis for gaps)
@@ -158,15 +157,13 @@ can be used directly.
     function SamplingParameters(
         sampling_type,
         step_type,
-        Teq::T,
-        burnin::Real,
         step_meaning,
         fraction_gap_step,
         branchlength_meaning,
         substitution_rate::Union{Nothing,Real},
         track_substitutions::Bool,
         mutation_matrix::Union{Nothing,AbstractMatrix},
-    ) where {T}
+    )
         step_meaning = try
             Symbol(step_meaning)
         catch err
@@ -175,28 +172,16 @@ can be used directly.
         end
 
         @argcheck sampling_type in (:discrete, :continuous)
-        Type = if sampling_type == :discrete
+        if sampling_type == :discrete
             @argcheck step_type in VALID_STEP_TYPES_DISCRETE """
             For :discrete mcmc, `step_type` should be in $VALID_STEP_TYPES_DISCRETE.
             Instead $(step_type).
             """
-            try
-                Teq = Int(Teq)
-                burnin = Int(burnin)
-            catch err
-                msg = """
-                For :discrete mcmc, `Teq` and `burnin` should be integers.
-                Instead $Teq and $burnin.
-                """
-                throw(ArgumentError(msg))
-            end
-            Int
         elseif sampling_type == :continuous
             @argcheck step_type in VALID_STEP_TYPES_CONTINUOUS """
             For :continuous mcmc, `step_type` should be in $VALID_STEP_TYPES_CONTINUOUS.
             Instead $(step_type).
             """
-            Float64
         end
 
         @argcheck step_meaning in VALID_STEP_MEANINGS """
@@ -237,11 +222,9 @@ can be used directly.
             end
         end
 
-        return new{Type}(
+        return new(
             sampling_type,
             step_type,
-            Teq,
-            burnin,
             step_meaning,
             fraction_gap_step,
             branchlength_meaning,
@@ -256,8 +239,6 @@ function Base.show(io::IO, params::SamplingParameters)
     println(io, typeof(params))
     println(io, "  sampling_type = :$(params.sampling_type)")
     println(io, "  step_type = :$(params.step_type)")
-    println(io, "  Teq = $(params.Teq)")
-    println(io, "  burnin = $(params.burnin)")
 
     if params.sampling_type == :discrete
         println(io, "  step_meaning = :$(params.step_meaning)")

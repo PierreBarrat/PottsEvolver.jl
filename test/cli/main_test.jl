@@ -21,46 +21,6 @@
     end
 end
 
-@testset "sampling_schedule" begin
-    discrete = SamplingParameters(; Teq=2)
-    continuous = SamplingParameters(;
-        sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0
-    )
-
-    @testset "one of the three, or none" begin
-        @test CLI.sampling_schedule(nothing, Float64[], nothing, discrete) == 1 # default
-        @test CLI.sampling_schedule(7, Float64[], nothing, discrete) == 7
-        @test CLI.sampling_schedule(nothing, [0.0, 1.5], nothing, continuous) == [0.0, 1.5]
-        mktemp() do path, io
-            write(io, "0.0\n2.0\n")
-            close(io)
-            @test CLI.sampling_schedule(nothing, Float64[], path, continuous) == [0.0, 2.0]
-        end
-    end
-
-    @testset "element type follows the sampling type" begin
-        # discrete sampling counts steps, and its methods dispatch on `Integer` time steps
-        @test CLI.sampling_schedule(nothing, [0.0, 2.0], nothing, discrete) isa Vector{Int}
-        @test CLI.sampling_schedule(nothing, [0.0, 2.0], nothing, continuous) isa
-            Vector{Float64}
-        @test_throws ArgumentError CLI.sampling_schedule(
-            nothing, [0.0, 1.5], nothing, discrete
-        )
-    end
-
-    @testset "combinations are refused" begin
-        @test_throws ArgumentError CLI.sampling_schedule(3, [0.0, 1.0], nothing, discrete)
-        @test_throws ArgumentError CLI.sampling_schedule(
-            3, Float64[], "tvals.txt", discrete
-        )
-        @test_throws ArgumentError CLI.sampling_schedule(
-            nothing, [0.0], "tvals.txt", discrete
-        )
-        # an explicit `-M 1` still conflicts: this is why the default is `nothing`
-        @test_throws ArgumentError CLI.sampling_schedule(1, [0.0, 1.0], nothing, discrete)
-    end
-end
-
 @testset "resolve_seed" begin
     seed, rng = CLI.resolve_seed(42)
     @test seed == 42
@@ -115,7 +75,7 @@ end
 
 @testset "main: end to end" begin
     # a model and a parameter file on disk, as a user would have them
-    function setup(dir; params_content="Teq = 2\nburnin = 1\n")
+    function setup(dir; params_content="[schedule]\nspacing = 2\nburnin = 1\n")
         model = joinpath(dir, "model.dat")
         PottsEvolver.write(model, PottsGraph(4, 21; init=:rand))
         paramfile = joinpath(dir, "params.toml")
@@ -271,7 +231,7 @@ end
 
             # continuous sampling without substitution_rate: the library's own ArgumentError
             continuous = joinpath(dir, "continuous.toml")
-            write(continuous, "sampling_type = \"continuous\"\nTeq = 0.5\n")
+            write(continuous, "sampling_type = \"continuous\"\n")
             @test CLI.main([
                 "sample-chain", model, "-p", continuous, "-o", out, "--verbose=-1"
             ]) == 1
@@ -290,7 +250,9 @@ end
                 """
                 sampling_type = "discrete"
                 step_type = "gibbs"
-                Teq = 50
+
+                [schedule]
+                spacing = 50
                 burnin = 100
                 """,
             )
@@ -332,7 +294,6 @@ end
                 """
                 sampling_type = "continuous"
                 step_type = "glauber"
-                Teq = 0.5
                 """,
             )
             out = joinpath(dir, "out")

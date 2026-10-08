@@ -31,9 +31,10 @@ type = "step"
 length = "exact"
 ```
 
-A `[run]` table, as written by [`write_params`](@ref), is ignored: it holds metadata about a
-run (input files, seed, sequence type) rather than sampling parameters, so a
-`<prefix>.params.toml` written by the CLI can be given back to it unchanged.
+The `[run]` and `[schedule]` tables, as written by [`write_params`](@ref), are ignored here:
+they hold metadata about a run and the sampling schedule, neither of which is a sampling
+parameter, so a `<prefix>.params.toml` written by the CLI can be given back to it unchanged.
+Read the schedule with [`load_schedule`](@ref).
 
 `mutation_matrix`, if given, is a nested array **of rows**: `mutation_matrix[a]` is the
 `a`-th row of the matrix, *i.e.* the relative mutation rates *out of* state `a` towards
@@ -49,9 +50,27 @@ function load_params(path::AbstractString)
 
     symbol_fields = ("sampling_type", "step_type", "step_meaning")
     for (k, v) in raw
-        if k == "run"
-            # run metadata, not sampling parameters: see the docstring
+        if k in ("run", "schedule")
+            # run metadata and sampling schedule, not sampling parameters: see the docstring
             continue
+        elseif k in ("Teq", "burnin")
+            throw(
+                ArgumentError(
+                    """
+                    `$k` is no longer a sampling parameter: the schedule moved to the \
+                    `[schedule]` table (and to -M/--spacing/--burnin). Replace
+
+                        $k = $v
+
+                    with, for instance
+
+                        [schedule]
+                        spacing = <time between samples>
+                        burnin = <time before the first sample>
+                        n_samples = <number of samples>
+                    """,
+                ),
+            )
         elseif k == "branchlength_meaning"
             kwargs[Symbol(k)] = BranchLengthMeaning(Symbol(v["type"]), Symbol(v["length"]))
         elseif k == "mutation_matrix"
@@ -254,7 +273,7 @@ end
 _params_pairs(p::SamplingParameters) = (f => getproperty(p, f) for f in propertynames(p))
 _params_pairs(d::AbstractDict) = (Symbol(k) => v for (k, v) in d)
 
-function _params_toml_dict(params; run=nothing)
+function _params_toml_dict(params; run=nothing, schedule=nothing)
     out = Dict{String,Any}()
     run_table = if isnothing(run)
         Dict{String,Any}()
@@ -279,6 +298,7 @@ function _params_toml_dict(params; run=nothing)
         end
     end
     isempty(run_table) || (out["run"] = run_table)
+    isnothing(schedule) || (out["schedule"] = schedule)
     return out
 end
 
@@ -292,11 +312,15 @@ The file can be read back by [`load_params`](@ref): fields that are `nothing` ar
 (`load_params` falls back to the same defaults), and anything that is not a
 `SamplingParameters` field goes to a `[run]` table that `load_params` ignores. `run` holds
 extra metadata to add there, *e.g.* the input files and the rng seed.
+
+`schedule` is the `[schedule]` table, as produced by [`write_tvals`](@ref): the sampling times
+are not sampling parameters, but they belong in the file so that a run can be reproduced from
+it with `-p` alone.
 """
-function write_params(path, params; run=nothing)
+function write_params(path, params; run=nothing, schedule=nothing)
     open(path, "w") do io
         # `Symbol` is not a valid TOML type: `string` converts it, and `sequence_type` too
-        TOML.print(string, io, _params_toml_dict(params; run); sorted=true)
+        TOML.print(string, io, _params_toml_dict(params; run, schedule); sorted=true)
     end
     return path
 end
@@ -352,15 +376,38 @@ written:
 - `<prefix>.substitutions.csv`: only if substitutions were tracked, see
   [`write_substitutions`](@ref).
 """
-function write_chain_output(outdir, prefix, result; run=nothing)
+function write_chain_output(outdir, prefix, result; run=nothing, schedule=nothing)
     files = String[]
+    schedule_table, sidecar = if isnothing(schedule)
+        nothing, nothing
+    else
+        write_tvals(schedule; prefix_path=joinpath(outdir, prefix))
+    end
 
     path = output_file(outdir, prefix, "fasta")
     write_fasta(path, result.sequences)
     push!(files, path)
     @info "Wrote $(length(result.sequences)) sequences to $path"
 
-    push!(files, write_params(output_file(outdir, prefix, "params.toml"), result.params; run))
+    push!(
+        files,
+        write_params(
+            output_file(outdir, prefix, "params.toml"),
+            result.params;
+            run,
+            schedule=schedule_table,
+        ),
+    )
+
+    if !isnothing(sidecar)
+        (dir, name), times = sidecar
+        path = output_file(dir, first(splitext(name)), "txt")
+        open(path, "w") do io
+            foreach(t -> println(io, t), times)
+        end
+        push!(files, path)
+        @info "Wrote the sampling times to $path"
+    end
 
     if _tracks_substitutions(result.params)
         path = write_substitutions(
@@ -442,53 +489,228 @@ function load_tvals(path::AbstractString)
     return tvals
 end
 
+#=========== Sampling schedule ===========#
+
+# A schedule is carried around as a small spec rather than a vector of times, so that it can
+# be written back to a parameter file without storing every value: a 100_000-sample log
+# schedule is four numbers. `kind` says how to expand it.
+const _SCHEDULE_KINDS = ("linear", "log")
+
 """
-    sampling_schedule(n_samples, tvals, tvals_file, params)
+    schedule_times(spec) -> Vector
 
-Resolve `-M`/`--tvals`/`--tvals-file` into the second argument of `mcmc_sample`: an `Integer`
-number of samples, or a vector of times.
+Expand a schedule spec into the vector of sampling times passed to `mcmc_sample`.
 
-The three are mutually exclusive - giving more than one is an error rather than a silent
-precedence, since they describe the same thing in incompatible ways. `-M` defaults to
-`nothing` for this reason: it is what tells an explicit `-M 1` from no `-M` at all.
-
-An explicit schedule is converted to the element type the sampling type needs: `Float64` for
-`:continuous`, `Int` for `:discrete`, which counts steps and therefore rejects a schedule that
-is not whole-numbered.
+- `(; kind=:linear, burnin, spacing, n_samples)`: `burnin` then `n_samples` samples `spacing`
+  apart, *i.e.* `range`;
+- `(; kind=:log, start, stop, n_samples)`: `n_samples` times from `start` to `stop`, spaced
+  geometrically, *i.e.* `logrange`. `start` must be `> 0`;
+- `(; kind=:explicit, tvals)`: the times themselves.
 """
-function sampling_schedule(n_samples, tvals, tvals_file, params)
-    given = filter(
-        !isnothing,
-        [
-            isnothing(n_samples) ? nothing : "-M",
-            isempty(tvals) ? nothing : "--tvals",
-            isnothing(tvals_file) ? nothing : "--tvals-file",
-        ],
-    )
-    @argcheck length(given) <= 1 """
-    $(join(given, ", ")) are mutually exclusive: they all set the sampling schedule.
-    Keep only one of them.
-    """
-
-    explicit = if !isempty(tvals)
-        tvals
-    elseif !isnothing(tvals_file)
-        load_tvals(tvals_file)
+function schedule_times(spec)
+    return if spec.kind == :linear
+        collect(spec.burnin .+ range(0, (spec.n_samples - 1) * spec.spacing; length=spec.n_samples))
+    elseif spec.kind == :log
+        @argcheck spec.start > 0 """
+        A log-spaced schedule needs `start > 0`. Instead $(spec.start).
+        """
+        collect(logrange(spec.start, spec.stop, spec.n_samples))
+    elseif spec.kind == :explicit
+        collect(spec.tvals)
     else
-        return something(n_samples, 1)
+        throw(ArgumentError("Unknown schedule kind `$(spec.kind)`"))
     end
-    return _convert_tvals(explicit, params.sampling_type)
 end
 
-function _convert_tvals(tvals, sampling_type)
-    sampling_type == :continuous && return Float64.(tvals)
-    # discrete sampling counts mcmc steps
-    fractional = filter(!isinteger, tvals)
-    @argcheck isempty(fractional) """
-    Discrete sampling counts steps: values in --tvals/--tvals-file must be whole numbers.
-    Instead $(fractional)
+"""
+    parse_tvals(table; dir=".") -> spec
+
+Build a schedule spec from the `[schedule]` table of a parameter file. See
+[`schedule_times`](@ref) for the shapes, and [`write_tvals`](@ref) for the inverse.
+
+`dir` is where a `tvals_file` entry is resolved from, so that a parameter file written next to
+its sidecar keeps working when the pair is moved together.
+"""
+function parse_tvals(table; dir=".")
+    haskey(table, "tvals") && return (; kind=:explicit, tvals=collect(table["tvals"]))
+    if haskey(table, "tvals_file")
+        return (; kind=:explicit, tvals=load_tvals(joinpath(dir, table["tvals_file"])))
+    end
+
+    kind = get(table, "kind", "linear")
+    @argcheck kind in _SCHEDULE_KINDS """
+    `[schedule] kind` should be one of $(join(_SCHEDULE_KINDS, ", ")). Instead `$kind`.
     """
-    return Int.(tvals)
+    return if kind == "linear"
+        (;
+            kind=:linear,
+            burnin=get(table, "burnin", nothing),
+            spacing=get(table, "spacing", nothing),
+            n_samples=get(table, "n_samples", nothing),
+        )
+    else
+        # a log schedule cannot be completed from the command line, so it must be whole
+        (;
+            kind=:log,
+            start=_required(table, "start"),
+            stop=_required(table, "stop"),
+            n_samples=_required(table, "n_samples"),
+        )
+    end
+end
+
+"""
+    normalize_schedule(spec) -> spec
+
+Fill in the entries a `linear` schedule leaves unset: `n_samples` defaults to 1, `spacing` to
+0 (every sample at the same time, which the library warns about) and `burnin` to `5 * spacing`,
+matching `mcmc_sample`'s own defaults.
+"""
+function normalize_schedule(spec)
+    spec.kind == :linear || return spec
+    spacing = something(spec.spacing, 0)
+    return (;
+        kind=:linear,
+        burnin=something(spec.burnin, 5 * spacing),
+        spacing,
+        n_samples=something(spec.n_samples, 1),
+    )
+end
+
+function _required(table, key)
+    haskey(table, key) || throw(
+        ArgumentError("`[schedule]` is missing the `$key` entry (kind=$(get(table, "kind", "linear")))"),
+    )
+    return table[key]
+end
+
+"""
+    write_tvals(spec; prefix_path=nothing) -> (table, sidecar)
+
+Render a schedule spec as the `[schedule]` table of a parameter file, in the same shape it was
+given: a structured schedule stays four numbers, and an explicit one keeps its values.
+
+`sidecar` is `nothing`, or a `path => times` pair to be written alongside: an explicit schedule
+that came from a file is stored as a file again rather than inlined, so that a parameter file
+stays readable no matter how many samples were asked for. It needs `prefix_path`, the output
+path stem.
+"""
+function write_tvals(spec; prefix_path=nothing)
+    if spec.kind == :linear
+        return Dict{String,Any}(
+            "kind" => "linear",
+            "burnin" => spec.burnin,
+            "spacing" => spec.spacing,
+            "n_samples" => spec.n_samples,
+        ), nothing
+    elseif spec.kind == :log
+        return Dict{String,Any}(
+            "kind" => "log",
+            "start" => spec.start,
+            "stop" => spec.stop,
+            "n_samples" => spec.n_samples,
+        ), nothing
+    end
+
+    # explicit: inline a schedule that was typed out, keep a file one as a file
+    inline = !get(spec, :from_file, false) || isnothing(prefix_path)
+    inline && return Dict{String,Any}("tvals" => collect(spec.tvals)), nothing
+    sidecar = "$(basename(prefix_path)).tvals.txt"
+    return Dict{String,Any}("tvals_file" => sidecar),
+    (dirname(prefix_path), sidecar) => spec.tvals
+end
+
+"""
+    resolve_schedule(args, params_path) -> spec
+
+Resolve the sampling schedule for `sample-chain`, from the command line and the `[schedule]`
+table of the parameter file.
+
+Flags win over the file. `--tvals`/`--tvals-file` give the times directly; `-M`, `--spacing`
+and `--burnin` describe an equispaced schedule and are filled in from a `linear` table in the
+file for whatever they leave unset. Asking for times directly *and* describing them is a
+conflict, not a precedence: the file's table is then ignored with a warning, since the two
+cannot be combined meaningfully.
+"""
+function resolve_schedule(args, params_path)
+    from_file = load_schedule(params_path)
+
+    explicit_flags = filter(
+        !isnothing,
+        [
+            isempty(args["tvals"]) ? nothing : "--tvals",
+            isnothing(args["tvals-file"]) ? nothing : "--tvals-file",
+        ],
+    )
+    @argcheck length(explicit_flags) <= 1 """
+    --tvals and --tvals-file both give the sampling times: keep only one.
+    """
+    linear_flags = filter(
+        !isnothing,
+        [
+            isnothing(args["n-samples"]) ? nothing : "-M",
+            isnothing(args["spacing"]) ? nothing : "--spacing",
+            isnothing(args["burnin"]) ? nothing : "--burnin",
+        ],
+    )
+    @argcheck isempty(explicit_flags) || isempty(linear_flags) """
+    $(join(vcat(explicit_flags, linear_flags), ", ")) cannot be combined: the first gives the \
+    sampling times, the others describe them. Keep one or the other.
+    """
+
+    # times given directly on the command line
+    if !isempty(explicit_flags)
+        _warn_ignored_table(from_file, join(explicit_flags, ", "))
+        return if isempty(args["tvals"])
+            (; kind=:explicit, tvals=load_tvals(args["tvals-file"]), from_file=true)
+        else
+            (; kind=:explicit, tvals=args["tvals"])
+        end
+    end
+
+    # an equispaced schedule, with the file supplying anything the flags leave out
+    if !isempty(linear_flags)
+        base = if !isnothing(from_file) && from_file.kind == :linear
+            from_file
+        else
+            _warn_ignored_table(from_file, join(linear_flags, ", "))
+            (; kind=:linear, burnin=nothing, spacing=nothing, n_samples=nothing)
+        end
+        # `something` would throw when both are unset, hence `_flag_or_file`
+        return normalize_schedule((;
+            kind=:linear,
+            burnin=_flag_or_file(args["burnin"], base.burnin),
+            spacing=_flag_or_file(args["spacing"], base.spacing),
+            n_samples=_flag_or_file(args["n-samples"], base.n_samples),
+        ))
+    end
+
+    # nothing on the command line: the file, or a single sample
+    return normalize_schedule(
+        something(from_file, (; kind=:linear, burnin=0, spacing=0, n_samples=1))
+    )
+end
+
+_flag_or_file(flag, from_file) = isnothing(flag) ? from_file : flag
+
+function _warn_ignored_table(from_file, flags)
+    isnothing(from_file) && return nothing
+    @warn """
+    The `[schedule]` table of the parameter file is ignored: $flags was given on the command \
+    line and describes the schedule differently.
+    """
+    return nothing
+end
+
+"""
+    load_schedule(path) -> Union{Nothing,spec}
+
+Read the `[schedule]` table of the parameter file at `path`, or return `nothing` if it has
+none. See [`parse_tvals`](@ref).
+"""
+function load_schedule(path::AbstractString)
+    table = get(TOML.parsefile(path), "schedule", nothing)
+    return isnothing(table) ? nothing : parse_tvals(table; dir=dirname(path))
 end
 
 """
@@ -565,13 +787,11 @@ _translate_kwargs(args) = args["translate"] ? (; translate_output=true) : (;)
 
 function run_chain(args, sink)
     (; g, params, s0, rng, seed) = setup_run(args)
-    schedule = sampling_schedule(
-        args["n-samples"], args["tvals"], args["tvals-file"], params
-    )
+    schedule = resolve_schedule(args, args["params"])
 
     result = mcmc_sample(
         g,
-        schedule,
+        schedule_times(schedule),
         s0,
         params;
         rng,
@@ -586,6 +806,7 @@ function run_chain(args, sink)
         default_prefix(args["prefix"], args["model"]),
         result;
         run=run_metadata(args, seed),
+        schedule,
     )
 end
 
@@ -768,6 +989,15 @@ function cli_settings()
         nargs = '*'
         arg_type = Float64
         default = Float64[]
+        "--spacing"
+        help = "Time between samples. Combines with -M/--burnin, and overrides the \
+                `[schedule]` table of --params"
+        arg_type = Float64
+        default = nothing
+        "--burnin"
+        help = "Time before the first sample (defaults to 5 * --spacing)"
+        arg_type = Float64
+        default = nothing
         "--tvals-file"
         help = "Path to a file with one time value per line, as an alternative to --tvals"
         default = nothing
