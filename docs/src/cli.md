@@ -98,6 +98,43 @@ The output files are named after the model file; use `--prefix` to name them dif
 `-o/--outdir` to put them elsewhere (it defaults to the current directory, and is created if
 needed).
 
+## Options
+
+The tables below cover the options you are likely to need. `pottsevolver sample-chain --help`
+and `pottsevolver sample-tree --help` remain the complete and authoritative list.
+
+Both commands take these:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `model` | required | Path to the Potts model, as read by [`read_graph`](@ref) |
+| `-p`, `--params` | required | Path to the TOML parameter file, see [The parameter file](@ref) |
+| `-o`, `--outdir` | current directory | Where to write the output; created if it does not exist |
+| `--prefix` | model file name, without extension | Base name of the output files, see [Output files](@ref) |
+| `--init` | `random_aa` | Initial or root sequence, see [The initial sequence](@ref) |
+| `--init-type` | inferred | Force the sequence type of an `--init` fasta: `aa`, `codon` or `rna` |
+| `--seed` | drawn, and recorded | Integer rng seed, see [Reproducibility](@ref) |
+| `-v`, `--verbose` | `0` | Terminal verbosity, see [Logging and verbosity](@ref) |
+| `--log-verbose` | `1` | Verbosity of the log file, same scale |
+| `--compute-omega` | off | Compute `substitution_rate` when the parameter file omits it |
+| `--translate` | off | Write amino acids instead of codons, for a `CodonSequence` run |
+
+`sample-chain` additionally takes the sampling schedule, in one of three mutually exclusive
+ways, see [`sample-chain`](@ref):
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-M`, `--n-samples` | `1` | Number of samples, spaced by `Teq` after `burnin` from the parameter file |
+| `--tvals` | — | Explicit schedule as space-separated numbers, the first being the burn-in |
+| `--tvals-file` | — | The same, read from a file with one value per line |
+
+`sample-tree` takes the tree and one flag, see [`sample-tree`](@ref):
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `tree` | required | Path to the Newick tree file, given after `model` |
+| `--internals` | off | Also write the internal node sequences and the sampled tree |
+
 ## The parameter file
 
 `--params/-p` is required and points at a TOML file whose keys are the fields of
