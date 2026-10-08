@@ -29,17 +29,25 @@
         a.aaseq[1] = 1
         ref_ΔE = PottsEvolver.compute_energy_differences(a, g)
 
-        b = copy(a)
         i = 1
-        x = rand(2:q)
-        b.seq[i] = x
-        b.aaseq[i] = genetic_code(x)
-        ΔE_true = PottsEvolver.compute_energy_differences(b, g)
+        # Only codons that encode an amino acid are valid sequence states: `genetic_code`
+        # returns `nothing` for the three stop codons, so there is no `aaseq` entry to store
+        # and `compute_energy_differences!` has no `x_aa` to work with. Drawing from `2:q`
+        # instead picked a stop codon about one run in twenty, which failed with
+        # `Cannot convert an object of type Nothing to an object of type Int64`.
+        # Going over all of them is cheap here, and leaves nothing to chance.
+        for x in PottsEvolver.coding_codons
+            b = copy(a)
+            b[i] = x # sets both `seq` and `aaseq`
+            ΔE_true = PottsEvolver.compute_energy_differences(b, g)
 
-        ΔE_buffer = copy(ref_ΔE)
-        ΔE_test = PottsEvolver.compute_energy_differences!(ΔE_buffer, ref_ΔE, a, i, x, g)
+            ΔE_buffer = copy(ref_ΔE) # `ref_ΔE` itself is only read
+            ΔE_test = PottsEvolver.compute_energy_differences!(
+                ΔE_buffer, ref_ΔE, a, i, x, g
+            )
 
-        @test all(ΔE_test .≈ ΔE_true)
+            @test all(ΔE_test .≈ ΔE_true)
+        end
     end
 
     @testset "_delta_energy" begin
