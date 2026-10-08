@@ -501,24 +501,35 @@ const _SCHEDULE_KINDS = ("linear", "log")
 
 Expand a schedule spec into the vector of sampling times passed to `mcmc_sample`.
 
-- `(; kind=:linear, burnin, spacing, n_samples)`: `burnin` then `n_samples` samples `spacing`
-  apart, *i.e.* `range`;
-- `(; kind=:log, start, stop, n_samples)`: `n_samples` times from `start` to `stop`, spaced
+- `(; kind=:linear, burnin, spacing, n_samples)`: `burnin`, then `n_samples` samples `spacing`
+  apart;
+- `(; kind=:linear, start, stop, n_samples)`: `n_samples` times from `start` to `stop`, evenly
+  spaced, *i.e.* `range`;
+- `(; kind=:log, start, stop, n_samples)`: the same between `start` and `stop`, but spaced
   geometrically, *i.e.* `logrange`. `start` must be `> 0`;
 - `(; kind=:explicit, tvals)`: the times themselves.
+
+The two `linear` shapes are the same schedule said two ways: `spacing` is the step between
+samples, `stop` the time of the last one.
 """
 function schedule_times(spec)
+    spec.kind == :explicit && return collect(spec.tvals)
+    @argcheck spec.kind in (:linear, :log) "Unknown schedule kind `$(spec.kind)`"
+
+    # `range`/`logrange` reject a single point unless start == stop, so take it directly
+    if spec.kind == :linear && hasproperty(spec, :spacing)
+        return collect(
+            spec.burnin .+ range(0, (spec.n_samples - 1) * spec.spacing; length=spec.n_samples)
+        )
+    end
+    spec.n_samples == 1 && return [spec.start]
     return if spec.kind == :linear
-        collect(spec.burnin .+ range(0, (spec.n_samples - 1) * spec.spacing; length=spec.n_samples))
-    elseif spec.kind == :log
+        collect(range(spec.start, spec.stop, spec.n_samples))
+    else
         @argcheck spec.start > 0 """
         A log-spaced schedule needs `start > 0`. Instead $(spec.start).
         """
         collect(logrange(spec.start, spec.stop, spec.n_samples))
-    elseif spec.kind == :explicit
-        collect(spec.tvals)
-    else
-        throw(ArgumentError("Unknown schedule kind `$(spec.kind)`"))
     end
 end
 
@@ -541,22 +552,21 @@ function parse_tvals(table; dir=".")
     @argcheck kind in _SCHEDULE_KINDS """
     `[schedule] kind` should be one of $(join(_SCHEDULE_KINDS, ", ")). Instead `$kind`.
     """
-    return if kind == "linear"
-        (;
-            kind=:linear,
-            burnin=get(table, "burnin", nothing),
-            spacing=get(table, "spacing", nothing),
-            n_samples=get(table, "n_samples", nothing),
-        )
-    else
-        # a log schedule cannot be completed from the command line, so it must be whole
-        (;
-            kind=:log,
+    # `start`/`stop` shapes must be whole: no flag completes them, unlike `spacing`/`burnin`
+    if kind == "log" || haskey(table, "stop")
+        return (;
+            kind=Symbol(kind),
             start=_required(table, "start"),
             stop=_required(table, "stop"),
             n_samples=_required(table, "n_samples"),
         )
     end
+    return (;
+        kind=:linear,
+        burnin=get(table, "burnin", nothing),
+        spacing=get(table, "spacing", nothing),
+        n_samples=get(table, "n_samples", nothing),
+    )
 end
 
 """
@@ -567,7 +577,7 @@ Fill in the entries a `linear` schedule leaves unset: `n_samples` defaults to 1,
 matching `mcmc_sample`'s own defaults.
 """
 function normalize_schedule(spec)
-    spec.kind == :linear || return spec
+    (spec.kind == :linear && hasproperty(spec, :spacing)) || return spec
     spacing = something(spec.spacing, 0)
     return (;
         kind=:linear,
@@ -596,16 +606,16 @@ stays readable no matter how many samples were asked for. It needs `prefix_path`
 path stem.
 """
 function write_tvals(spec; prefix_path=nothing)
-    if spec.kind == :linear
+    if spec.kind == :linear && hasproperty(spec, :spacing)
         return Dict{String,Any}(
             "kind" => "linear",
             "burnin" => spec.burnin,
             "spacing" => spec.spacing,
             "n_samples" => spec.n_samples,
         ), nothing
-    elseif spec.kind == :log
+    elseif spec.kind in (:linear, :log)
         return Dict{String,Any}(
-            "kind" => "log",
+            "kind" => string(spec.kind),
             "start" => spec.start,
             "stop" => spec.stop,
             "n_samples" => spec.n_samples,
@@ -671,7 +681,8 @@ function resolve_schedule(args, params_path)
     # an equispaced schedule, with the file supplying anything the flags leave out
     if !isempty(linear_flags)
         base = if !isnothing(from_file) && from_file.kind == :linear
-            from_file
+            # a start/stop table is restated as burnin/spacing so a flag can override one entry
+            as_spacing_form(from_file)
         else
             _warn_ignored_table(from_file, join(linear_flags, ", "))
             (; kind=:linear, burnin=nothing, spacing=nothing, n_samples=nothing)
@@ -689,6 +700,18 @@ function resolve_schedule(args, params_path)
     return normalize_schedule(
         something(from_file, (; kind=:linear, burnin=0, spacing=0, n_samples=1))
     )
+end
+
+"""
+    as_spacing_form(spec)
+
+Restate a `linear` schedule given as `start`/`stop` in terms of `burnin`/`spacing`, so that a
+flag can override one entry of it. The two describe the same times.
+"""
+function as_spacing_form(spec)
+    hasproperty(spec, :spacing) && return spec
+    spacing = spec.n_samples > 1 ? (spec.stop - spec.start) / (spec.n_samples - 1) : 0
+    return (; kind=:linear, burnin=spec.start, spacing, n_samples=spec.n_samples)
 end
 
 _flag_or_file(flag, from_file) = isnothing(flag) ? from_file : flag
@@ -819,6 +842,7 @@ function run_tree(args, sink)
         read_tree(args["tree"]),
         params;
         init=s0,
+        burnin=something(args["burnin"], 0),
         rng,
         verbose=args["verbose"],
         extra_sinks=(sink,),
@@ -929,6 +953,11 @@ function _add_shared_args!(settings::ArgParseSettings)
         help = "One of aa/codon/rna: force the sequence type read from an --init fasta \
                 path, skipping inference"
         default = nothing
+        "--burnin"
+        help = "For sample-chain, time before the first sample (defaults to 5 * --spacing). \
+                For sample-tree, time spent equilibrating the root sequence before sampling"
+        arg_type = Float64
+        default = nothing
         "--seed"
         help = "Integer RNG seed"
         arg_type = Int
@@ -978,24 +1007,20 @@ function cli_settings()
     _add_shared_args!(settings["sample-chain"])
     @add_arg_table! settings["sample-chain"] begin
         "-M", "--n-samples"
-        help = "Number of samples taken along the chain (spaced by `Teq`, per --params). \
-                Defaults to 1, and is mutually exclusive with --tvals/--tvals-file"
+        help = "Number of samples taken along the chain. Combines with --spacing/--burnin \
+                and with the `[schedule]` table of --params; defaults to 1"
         arg_type = Int
         default = nothing # `nothing` means 1: it tells an explicit `-M 1` from no `-M` at all
         "--tvals"
-        help = "Explicit sampling schedule (space-separated numbers), bypassing -M/Teq. \
-                The first value is the burn-in time; later values are absolute \
-                times/steps, not deltas"
+        help = "Explicit sampling schedule (space-separated numbers), instead of \
+                -M/--spacing/--burnin. The first value is the burn-in time; later values \
+                are absolute times/steps, not deltas"
         nargs = '*'
         arg_type = Float64
         default = Float64[]
         "--spacing"
         help = "Time between samples. Combines with -M/--burnin, and overrides the \
                 `[schedule]` table of --params"
-        arg_type = Float64
-        default = nothing
-        "--burnin"
-        help = "Time before the first sample (defaults to 5 * --spacing)"
         arg_type = Float64
         default = nothing
         "--tvals-file"

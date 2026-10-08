@@ -151,11 +151,10 @@ will contain the amino acid sequence and not the codons.
 `translate_output` defaults to `false`: the output keeps the type that was sampled, and
 `PottsEvolver.translate` can be applied to it afterwards.
 
-## Warning
-The `Teq` field of `params` is not used in the sampling.
-However, the `burnin` field will be used to set the root sequence: `burnin` mcmc steps
-will be performed starting from the input sequence, and the result is placed at the root.
-If you want a precise root sequence to be used, set `burnin=0` in `params`.
+Sampling times come from the branch lengths of the tree, so there is no schedule to give.
+The `burnin` kwarg sets the root sequence: `burnin` mcmc steps are performed starting from the
+input sequence, and the result is placed at the root. It defaults to 0, which places the input
+sequence at the root exactly as given.
 """
 function mcmc_sample(
     g,

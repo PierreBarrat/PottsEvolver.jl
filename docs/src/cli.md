@@ -75,8 +75,10 @@ Write the sampling parameters to a TOML file:
 # params.toml
 sampling_type = "discrete"
 step_type = "gibbs"
-Teq = 50
-burnin = 100
+
+[schedule]
+spacing = 50     # time between samples
+burnin = 100     # time before the first sample
 ```
 
 Then sample 100 sequences from a Potts model stored in `model.dat` (any file that
@@ -113,6 +115,7 @@ Both commands take these:
 | `--prefix` | model file name, without extension | Base name of the output files, see [Output files](@ref) |
 | `--init` | `random_aa` | Initial or root sequence, see [The initial sequence](@ref) |
 | `--init-type` | inferred | Force the sequence type of an `--init` fasta: `aa`, `codon` or `rna` |
+| `--burnin` | `5 * spacing`, or `0` on a tree | Time before the first sample; on a tree, time spent equilibrating the root |
 | `--seed` | drawn, and recorded | Integer rng seed, see [Reproducibility](@ref) |
 | `-v`, `--verbose` | `0` | Terminal verbosity, see [Logging and verbosity](@ref) |
 | `--log-verbose` | `1` | Verbosity of the log file, same scale |
@@ -124,7 +127,8 @@ ways, see [`sample-chain`](@ref):
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-M`, `--n-samples` | `1` | Number of samples, spaced by `Teq` after `burnin` from the parameter file |
+| `-M`, `--n-samples` | `1` | Number of samples |
+| `--spacing` | `0` | Time between samples |
 | `--tvals` | — | Explicit schedule as space-separated numbers, the first being the burn-in |
 | `--tvals-file` | — | The same, read from a file with one value per line |
 
@@ -203,14 +207,63 @@ no symbols to write: use `--init random_num`.
 Samples along a single Markov chain. The schedule — when samples are taken — is set in one of
 three mutually exclusive ways.
 
-`-M/--n-samples` takes `M` samples spaced by `Teq`, after `burnin`, both read from the
-parameter file. This is the common case:
+### Equispaced samples
+
+`-M/--n-samples`, `--spacing` and `--burnin` take `M` samples `spacing` apart, after `burnin`.
+This is the common case:
 
 ```sh
-pottsevolver sample-chain model.dat -p params.toml -M 100
+pottsevolver sample-chain model.dat -p params.toml -M 100 --spacing 50 --burnin 100
 ```
 
-`--tvals` gives the schedule explicitly instead. The first value is the burn-in, and later
+The same schedule can live in the parameter file, which is handy when you reuse it:
+
+```toml
+[schedule]
+spacing = 50
+burnin = 100
+n_samples = 100
+```
+
+Flags win over the file, entry by entry, so the line above with `-M 200` reuses the file's
+`spacing` and `burnin` and takes 200 samples instead. `--burnin` defaults to `5 * spacing`, and
+`--spacing` to 0 — which puts every sample at the same time, and warns, since no mcmc step
+happens between them.
+
+The file also accepts the same schedule said the other way round — first and last sample
+instead of the step between them:
+
+```toml
+[schedule]
+kind = "linear"   # the default, so it may be omitted
+start = 0
+stop = 5000
+n_samples = 100
+```
+
+### Log-spaced schedules
+
+Equispaced samples are a poor fit for watching a chain equilibrate, where you want the early
+times in detail. `kind = "log"` takes the same three entries but spaces the times
+geometrically:
+
+```toml
+[schedule]
+kind = "log"
+start = 1
+stop = 100000
+n_samples = 100
+```
+
+`start` must be positive, since a geometric schedule has no ratio from zero. This has no flag
+equivalent: `--params` is required anyway, so an unusual schedule can simply live there.
+
+Note that a schedule is stored as this handful of numbers rather than as its values, so asking
+for 100 000 samples costs four lines in the file, not 100 000.
+
+### Arbitrary schedules
+
+`--tvals` gives the times explicitly instead. The first value is the burn-in, and later
 values are *absolute* times, not gaps between samples:
 
 ```sh
@@ -224,9 +277,15 @@ lines starting with `#`:
 pottsevolver sample-chain model.dat -p params.toml --tvals-file schedule.txt
 ```
 
-Giving two of these three is an error rather than one silently winning. Note that for
+Giving the times directly *and* describing them with `-M`/`--spacing`/`--burnin` is an error
+rather than one silently winning: they are two ways of saying the same thing. Note that for
 `sampling_type = "discrete"`, time is a number of MCMC steps, so an explicit schedule has to be
 whole numbers.
+
+An explicit schedule is the one case that cannot be stored as a few numbers. `--tvals` is
+written into `<prefix>.params.toml` as it stands, while `--tvals-file` is copied next to the
+other outputs as `<prefix>.tvals.txt` and referenced from the parameter file - so the file
+stays readable however long the schedule is, and the output directory stays self-contained.
 
 ## `sample-tree`
 
@@ -236,8 +295,10 @@ Samples along the branches of a tree, which is given as a Newick file after the 
 pottsevolver sample-tree model.dat tree.nwk -p params.toml -o results
 ```
 
-The root sequence comes from `--init`, after `burnin` steps of equilibration (set `burnin = 0`
-in the parameter file to use the init sequence exactly as given). `Teq` is not used.
+The root sequence comes from `--init`, and `--burnin` equilibrates it first — useful with a
+random initial sequence, and left at 0 to place the given sequence at the root exactly as it
+is. There is no schedule to give otherwise: sampling times come from the branch lengths of the
+tree, see [Interpreting branch lengths](@ref).
 See [Interpreting branch lengths](@ref) for how branch lengths map onto MCMC time.
 
 By default only the leaf sequences are written. `--internals` additionally writes the internal

@@ -9,6 +9,16 @@
             [3, 3, 3]
     end
 
+    @testset "linear, as start/stop" begin
+        # the same schedule as burnin=0, spacing=25, n_samples=5, said the other way
+        spec = (; kind=:linear, start=0, stop=100, n_samples=5)
+        @test CLI.schedule_times(spec) == [0, 25, 50, 75, 100]
+        @test CLI.schedule_times(spec) ==
+            CLI.schedule_times((; kind=:linear, burnin=0, spacing=25, n_samples=5))
+        # `range` rejects a single point unless start == stop, so it is taken directly
+        @test CLI.schedule_times((; kind=:linear, start=7, stop=99, n_samples=1)) == [7]
+    end
+
     @testset "log" begin
         spec = (; kind=:log, start=1, stop=1000, n_samples=4)
         @test CLI.schedule_times(spec) ≈ [1, 10, 100, 1000]
@@ -16,6 +26,8 @@
         @test_throws ArgumentError CLI.schedule_times(
             (; kind=:log, start=0, stop=10, n_samples=3)
         )
+        # a single point needs no ratio, so `start = 0` is fine there
+        @test CLI.schedule_times((; kind=:log, start=0, stop=10, n_samples=1)) == [0]
     end
 
     @testset "explicit" begin
@@ -40,6 +52,15 @@ end
     @test CLI.parse_tvals(
         Dict("kind" => "log", "start" => 1, "stop" => 100, "n_samples" => 3)
     ) == (; kind=:log, start=1, stop=100, n_samples=3)
+    # `stop` selects the start/stop shape, with `linear` still the default kind
+    @test CLI.parse_tvals(Dict("start" => 0, "stop" => 100, "n_samples" => 5)) ==
+        (; kind=:linear, start=0, stop=100, n_samples=5)
+    @test CLI.parse_tvals(
+        Dict("kind" => "linear", "start" => 0, "stop" => 100, "n_samples" => 5)
+    ) == (; kind=:linear, start=0, stop=100, n_samples=5)
+    # it is a whole shape: no flag completes it, so a missing entry is an error
+    @test_throws ArgumentError CLI.parse_tvals(Dict("start" => 0, "stop" => 100))
+    @test_throws ArgumentError CLI.parse_tvals(Dict("stop" => 100, "n_samples" => 5))
     @test CLI.parse_tvals(Dict("tvals" => [1, 2, 4])).tvals == [1, 2, 4]
 
     # a log table cannot be completed from the command line, so it must be whole, and a
@@ -72,6 +93,15 @@ end
 
         spec = (; kind=:linear, burnin=100, spacing=50, n_samples=4)
         table, _ = CLI.write_tvals(spec)
+        @test CLI.parse_tvals(table) == spec
+
+        # a start/stop schedule is written back as start/stop, not restated as a spacing,
+        # which also avoids a float wobble when the spacing does not divide evenly
+        spec = (; kind=:linear, start=0, stop=100, n_samples=4)
+        table, _ = CLI.write_tvals(spec)
+        @test table == Dict(
+            "kind" => "linear", "start" => 0, "stop" => 100, "n_samples" => 4
+        )
         @test CLI.parse_tvals(table) == spec
     end
 
@@ -145,6 +175,18 @@ end
         @test spec == (; kind=:linear, burnin=100, spacing=50, n_samples=3)
         spec = CLI.resolve_schedule(cli_args(; spacing=5), file)
         @test spec == (; kind=:linear, burnin=100, spacing=5.0, n_samples=7)
+    end
+
+    @testset "a start/stop table is restated so a flag can override one entry" begin
+        file = with_params("[schedule]\nstart = 0\nstop = 100\nn_samples = 5\n")
+        # untouched without flags: the shape is preserved
+        @test CLI.resolve_schedule(cli_args(), file) ==
+            (; kind=:linear, start=0, stop=100, n_samples=5)
+        # with a flag: same times, restated as burnin/spacing, then overridden
+        @test CLI.resolve_schedule(cli_args(; n_samples=3), file) ==
+            (; kind=:linear, burnin=0, spacing=25.0, n_samples=3)
+        @test CLI.resolve_schedule(cli_args(; spacing=10), file) ==
+            (; kind=:linear, burnin=0, spacing=10.0, n_samples=5)
     end
 
     @testset "a log schedule comes from the file" begin

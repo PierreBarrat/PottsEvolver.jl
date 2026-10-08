@@ -7,9 +7,9 @@ DocTestSetup = quote
     using PottsEvolver
     L, q, M = 20, 21, 5; # lenth of the sequence, 21 amino acids, 5 samples
     g = PottsGraph(L, q, Float64; init=:rand); # random graph
-    params = SamplingParameters(; sampling_type=:discrete, Teq=50, burnin=100)
+    params = SamplingParameters(; sampling_type=:discrete)
     initial_sequence = AASequence(L)
-    result = mcmc_sample(g, M, params; init=initial_sequence);
+    result = mcmc_sample(g, M, params; spacing=50, burnin=100, init=initial_sequence);
 end
 ```
 # Sampling from Potts Models
@@ -33,13 +33,16 @@ The sampling process is controlled by the  structure [`SamplingParameters`](@ref
 ## Chain Sampling
 
 Start an evolutionary trajectory, _i.e._ a montecarlo chain, which is sampled at specified times. 
-The code below samples `M=5` sequences, each separated by 50 discrete Gibbs steps. 
+The code below samples `M=5` sequences, each separated by 50 discrete Gibbs steps.
+`SamplingParameters` describes *how* a step is taken; *when* samples are taken - the spacing
+between them, and the burn-in before the first - is given to `mcmc_sample` itself. 
 ```@repl sampling_1
 L, q, M = 20, 21, 5; # sequence of lenth 20, 21 amino acids, 5 samples
 g = PottsGraph(L, q, Float64; init=:rand); # random graph
-params = SamplingParameters(; sampling_type=:discrete, Teq=50, burnin=100)
+params = SamplingParameters(; sampling_type=:discrete) # how a step is taken
 initial_sequence = AASequence(L)
-result = mcmc_sample(g, M, params; init=initial_sequence);
+# `spacing` and `burnin` say when samples are taken
+result = mcmc_sample(g, M, params; spacing=50, burnin=100, init=initial_sequence);
 ```
 
 The output is a named tuple with the following fields:
@@ -54,7 +57,7 @@ write_fasta("/tmp/example.fasta", result.sequences) # can be written to fasta fo
 run(`cat /tmp/example.fasta`) # headers correspond to the time of sampling
 ```
 
-The `burnin` parameter means that 100 steps are performed before taking the first sample in the chain. 
+The `burnin` argument means that 100 steps are performed before taking the first sample in the chain. 
 The first sequence of the chain is therefore different from `initial_sequence`: 
 ```jldoctest sampling_1
 julia> AASequence(result.sequences[1]) != initial_sequence
@@ -62,9 +65,7 @@ true
 ```
 If we want to start the chain from a specific sequence, we just set `burnin` to 0.
 ```jldoctest sampling_1
-julia> params = SamplingParameters(; sampling_type=:discrete, Teq=50, burnin=0);
-
-julia> result = mcmc_sample(g, M, params; init=initial_sequence);
+julia> result = mcmc_sample(g, M, params; spacing=50, burnin=0, init=initial_sequence);
 
 julia> AASequence(result.sequences[1]) == initial_sequence
 true
@@ -104,7 +105,7 @@ julia> result.sequences.labels # sequence labels correspond to sampling time
 Sampling along the branches of the tree is also done using `mcmc_sample`. 
 The input tree is provided either from a newick file, either as a `TreeTools.Tree` objet, see [TreeTools](https://github.com/PierreBarrat/TreeTools.jl). 
 ```@repl sampling_1
-params = SamplingParameters(; sampling_type=:discrete, Teq=50, burnin=0);
+params = SamplingParameters(; sampling_type=:discrete);
 result = mcmc_sample(g, "../../example/small_tree_integers.nwk", params; init=initial_sequence);
 result.tree # the tree object, with sequences stored at each node
 result.tree.root.data.seq == initial_sequence # the initial sequence is placed at the root
@@ -159,14 +160,14 @@ This average substituion rate can be computed either by sampling the potts model
 
 ```@repl sampling_1
 n_samples = 100 # compute the average transition rate from 100 samples
-Teq = 10*L; # discrete steps between samples
+spacing = 10*L; # discrete steps between samples
 step_type = :glauber;
 
 Ω_1 = let 
     # first generate sample with discrete time, then use it to compute the average rate
     s0 = AASequence(L)
-    params = SamplingParameters(; sampling_type=:discrete, Teq) 
-    S = mcmc_sample(g, M, params; init=s0, pack_output=false).sequences
+    params = SamplingParameters(; sampling_type=:discrete)
+    S = mcmc_sample(g, M, params; spacing, init=s0, pack_output=false).sequences
     # compute the average transition rate from the sampled sequences
     PottsEvolver.average_transition_rate(g, step_type, S)
 end

@@ -122,14 +122,14 @@ md"""
 
 # ╔═╡ 5414be7f-8631-4885-bdd5-7fc35c0a33ca
 md"""
-As an example, the following will sample a chain of length `M=10` sequences, starting from a random amino acid sequence, and taking `Teq=100` *discrete* steps between each sample. Finally, the output is translated back to amino acids
+As an example, the following will sample a chain of length `M=10` sequences, starting from a random amino acid sequence, and taking `spacing=100` *discrete* steps between each sample. Finally, the output is translated back to amino acids
 """
 
 # ╔═╡ 259ed51a-75cc-4d02-a42c-b35054c4d1d0
 result = let
     M = 10
-    parameters = SamplingParameters(; Teq=100, burnin=0)
-    mcmc_sample(potts, M, parameters; init=:random_aa)
+    parameters = SamplingParameters()
+    mcmc_sample(potts, M, parameters; spacing=100, burnin=0, init=:random_aa)
 end;
 
 # ╔═╡ 7b174b8a-13bd-4534-bc0e-595149f9411f
@@ -179,9 +179,9 @@ Sometimes, it is easier to just have an array of sequences instead of a `Sequenc
 # ╔═╡ 0aab35e9-99d8-41ff-83d6-94cbc420468c
 let
     M = 3
-    parameters = SamplingParameters(; Teq=100, burnin=0)
+    parameters = SamplingParameters()
     chain = mcmc_sample(
-		potts, M, parameters; init=:random_aa, pack_output=false
+		potts, M, parameters; spacing=100, burnin=0, init=:random_aa, pack_output=false
 	)
 	chain.sequences
 end
@@ -224,10 +224,10 @@ let
 		sampling_type=:continuous,
 		step_type=:glauber,
 		substitution_rate=Ω_glauber,
-		Teq=0.25, # time between samples
 	)
 
-	mcmc_sample(potts, 5, parameters; init=:random_aa).sequences
+	# `spacing` is the time between samples
+	mcmc_sample(potts, 5, parameters; spacing=0.25, init=:random_aa).sequences
 end
 
 # ╔═╡ 9f7a28b5-6fad-45d3-a294-fe6217996206
@@ -278,13 +278,14 @@ let
     num_seq = PottsEvolver.NumSequence(s_not_valid, q) # assumes the sequence has no biological meaning
 
     # Using this for sampling
-    parameters = SamplingParameters(; Teq=100, burnin=0)
-    mcmc_sample(potts, 10, aa_seq, parameters) # use "normal" amino acid based mcmc 
-    mcmc_sample(potts, 10, codon_seq, parameters) # use codon based mcmc
+    parameters = SamplingParameters()
+    sched = (; spacing=100, burnin=0)
+    mcmc_sample(potts, 10, aa_seq, parameters; sched...) # use "normal" amino acid based mcmc 
+    mcmc_sample(potts, 10, codon_seq, parameters; sched...) # use codon based mcmc
 
-    mcmc_sample(potts, 10, parameters; init=aa_seq) # this also works
-    mcmc_sample(potts, 10, parameters; init=s_not_valid) # should work, but it's less clear
-    mcmc_sample(potts, 10, parameters; init=:random_aa) # operates on aa, but starting from a random sequence
+    mcmc_sample(potts, 10, parameters; sched..., init=aa_seq) # this also works
+    mcmc_sample(potts, 10, parameters; sched..., init=s_not_valid) # should work, but it's less clear
+    mcmc_sample(potts, 10, parameters; sched..., init=:random_aa) # operates on aa, but starting from a random sequence
 end
 
 # ╔═╡ 65c82b80-cdfb-47f4-b398-989ec42ebbb3
@@ -305,8 +306,11 @@ Note that this is **not** yet compatible with continuous time sampling (will imp
 # ╔═╡ 6576b8ba-762c-4e74-90b5-76f3725557d7
 result_codons = let
     M = 10
-    parameters = SamplingParameters(; Teq=100, burnin=0)
-    mcmc_sample(potts, M, parameters; init=:random_codon, translate_output=true)
+    parameters = SamplingParameters()
+    mcmc_sample(
+		potts, M, parameters; spacing=100, burnin=0, init=:random_codon,
+		translate_output=true,
+	)
 end;
 
 # ╔═╡ 863b9af8-7d93-4633-929c-bdfe7e934512
@@ -336,8 +340,10 @@ If you do not translate the output, here is what happens:
 # ╔═╡ d9e5a4a1-7fab-4140-94dd-a4943bb16a0e
 sequences_codon = let
     M = 10
-    parameters = SamplingParameters(; Teq=100, burnin=0)
-    mcmc_sample(potts, M, parameters; init=:random_codon).sequences
+    parameters = SamplingParameters()
+    mcmc_sample(
+		potts, M, parameters; spacing=100, burnin=0, init=:random_codon
+	).sequences
 end;
 
 # ╔═╡ 2ddc7737-8ae2-4725-91dd-5076c3bbd350

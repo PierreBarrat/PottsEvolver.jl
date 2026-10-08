@@ -28,8 +28,8 @@ The accessible neighbours of a codon are all coding codons reachable by a single
 ## Example
 
 ```julia
-params = SamplingParameters(; sampling_type=:discrete, Teq=100)
-result = mcmc_sample(potts, 10, params; init=:random_codon)
+params = SamplingParameters(; sampling_type=:discrete)
+result = mcmc_sample(potts, 10, params; spacing=100, init=:random_codon)
 result.sequences  # a SequenceSample holding codons
 ```
 
