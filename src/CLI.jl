@@ -619,6 +619,11 @@ end
 # and is rethrown.
 const _USER_ERRORS = Union{ArgumentError,SystemError,ArgParse.ArgParseError,KeyError}
 
+# `showerror` on an `ArgParseError` prints its constructor, not its message, which is no use to
+# someone who simply mistyped a flag.
+_error_message(err) = sprint(showerror, err)
+_error_message(err::ArgParse.ArgParseError) = err.text
+
 """
     (@main)(ARGS)
 
@@ -630,7 +635,10 @@ function (@main)(ARGS)
         parse_cli(ARGS)
     catch err
         err isa _USER_ERRORS || rethrow()
-        println(stderr, "pottsevolver: $(sprint(showerror, err))")
+        # no logger yet: the output directory is not even known at this point
+        println(stderr, "pottsevolver: $(_error_message(err))")
+        println(stderr, ArgParse.usage_string(cli_settings()))
+        println(stderr, "Run `pottsevolver --help` for the list of commands and options.")
         return 1
     end
 
@@ -663,7 +671,7 @@ function (@main)(ARGS)
                     rethrow()
                 end
                 # `@error` reaches both the console and the log file, so one message is enough
-                @error "pottsevolver failed: $(sprint(showerror, err))"
+                @error "pottsevolver failed: $(_error_message(err))"
                 return 1
             end
         end
@@ -726,19 +734,17 @@ function _add_shared_args!(settings::ArgParseSettings)
 end
 
 """
-    parse_cli(args) -> Dict
+    cli_settings() -> ArgParseSettings
 
-Parse `pottsevolver`'s command-line arguments for the `sample-chain` and `sample-tree`
-subcommands. Returns the nested `Dict` produced by `ArgParse.parse_args`: top-level
-`"%COMMAND%"` names the chosen subcommand, and `d[d["%COMMAND%"]]` holds that subcommand's
-own flags. Run `pottsevolver --help`, `pottsevolver sample-chain --help` or
-`pottsevolver sample-tree --help` for the full, authoritative flag list.
+The `ArgParseSettings` describing `pottsevolver`'s whole command line.
 
-A parse error raises an `ArgParse.ArgParseError` (rather than exiting the process), so it
-can be caught and reported by the caller.
+Separate from [`parse_cli`](@ref) so that `(@main)` can build the usage message to show
+alongside a parse error: `exc_handler=debug_handler` makes `parse_args` throw instead of
+printing usage and exiting, which is what lets the error be caught, but it also means nobody
+prints the usage line unless we do.
 """
-function parse_cli(args)
-    settings = ArgParseSettings(; exc_handler=ArgParse.debug_handler)
+function cli_settings()
+    settings = ArgParseSettings(; prog="pottsevolver", exc_handler=ArgParse.debug_handler)
     @add_arg_table! settings begin
         "sample-chain"
         action = :command
@@ -777,6 +783,20 @@ function parse_cli(args)
         action = :store_true
     end
 
-    return parse_args(args, settings)
+    return settings
 end
+
+"""
+    parse_cli(args) -> Dict
+
+Parse `pottsevolver`'s command-line arguments for the `sample-chain` and `sample-tree`
+subcommands. Returns the nested `Dict` produced by `ArgParse.parse_args`: top-level
+`"%COMMAND%"` names the chosen subcommand, and `d[d["%COMMAND%"]]` holds that subcommand's
+own flags. Run `pottsevolver --help`, `pottsevolver sample-chain --help` or
+`pottsevolver sample-tree --help` for the full, authoritative flag list.
+
+A parse error raises an `ArgParse.ArgParseError` (rather than exiting the process), so it
+can be caught and reported by the caller.
+"""
+parse_cli(args) = parse_args(args, cli_settings())
 end # module CLI

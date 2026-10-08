@@ -94,6 +94,25 @@ end
     end
 end
 
+@testset "cli_settings: usage string names the program" begin
+    # without `prog`, ArgParse writes `<PROGRAM>` in the usage line and in --help
+    usage = ArgParse.usage_string(CLI.cli_settings())
+    @test occursin("pottsevolver", usage)
+    @test occursin("sample-chain", usage)
+end
+
+@testset "parse errors report the message, not the exception" begin
+    # `showerror` on an ArgParseError prints its constructor; `_error_message` unwraps it
+    err = ArgParse.ArgParseError("no command given")
+    @test CLI._error_message(err) == "no command given"
+    # other errors keep `showerror`'s output, where the type is informative
+    @test CLI._error_message(ArgumentError("boom")) == "ArgumentError: boom"
+
+    # and they are user errors: exit code 1, no exception escaping
+    @test CLI.main(String[]) == 1
+    @test CLI.main(["sample-chain", "--no-such-flag"]) == 1
+end
+
 @testset "main: end to end" begin
     # a model and a parameter file on disk, as a user would have them
     function setup(dir; params_content="Teq = 2\nburnin = 1\n")
