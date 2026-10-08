@@ -102,8 +102,10 @@ needed).
 
 ## Options
 
-The tables below cover the options you are likely to need. `pottsevolver sample-chain --help`
-and `pottsevolver sample-tree --help` remain the complete and authoritative list.
+The tables below cover the options you are likely to need. For every option of every
+subcommand, see [CLI option reference](@ref), which is generated from the CLI's own argument
+definitions; `pottsevolver sample-chain --help` and `pottsevolver sample-tree --help` print the
+same thing.
 
 Both commands take these:
 
