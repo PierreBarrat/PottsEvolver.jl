@@ -573,12 +573,11 @@ end
     normalize_schedule(spec) -> spec
 
 Fill in the entries a `linear` schedule leaves unset: `n_samples` defaults to 1, `spacing` to
-0 (every sample at the same time, which the library warns about) and `burnin` to `5 * spacing`,
-matching `mcmc_sample`'s own defaults.
+1 and `burnin` to `5 * spacing`, matching `mcmc_sample`'s own defaults.
 """
 function normalize_schedule(spec)
     (spec.kind == :linear && hasproperty(spec, :spacing)) || return spec
-    spacing = something(spec.spacing, 0)
+    spacing = something(spec.spacing, 1)
     return (;
         kind=:linear,
         burnin=something(spec.burnin, 5 * spacing),
@@ -698,7 +697,7 @@ function resolve_schedule(args, params_path)
 
     # nothing on the command line: the file, or a single sample
     return normalize_schedule(
-        something(from_file, (; kind=:linear, burnin=0, spacing=0, n_samples=1))
+        something(from_file, (; kind=:linear, burnin=nothing, spacing=nothing, n_samples=1))
     )
 end
 
@@ -1019,8 +1018,8 @@ function cli_settings()
         arg_type = Float64
         default = Float64[]
         "--spacing"
-        help = "Time between samples. Combines with -M/--burnin, and overrides the \
-                `[schedule]` table of --params"
+        help = "Time between samples (default 1, which is seldom enough to decorrelate). \
+                Combines with -M/--burnin, and overrides the `[schedule]` table of --params"
         arg_type = Float64
         default = nothing
         "--tvals-file"

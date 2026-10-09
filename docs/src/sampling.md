@@ -35,7 +35,9 @@ The sampling process is controlled by the  structure [`SamplingParameters`](@ref
 Start an evolutionary trajectory, _i.e._ a montecarlo chain, which is sampled at specified times. 
 The code below samples `M=5` sequences, each separated by 50 discrete Gibbs steps.
 `SamplingParameters` describes *how* a step is taken; *when* samples are taken - the spacing
-between them, and the burn-in before the first - is given to `mcmc_sample` itself. 
+between them, and the burn-in before the first - is given to `mcmc_sample` itself.
+You are expected to provide a schedule: `spacing` defaults to 1, meaning a single mcmc step
+between samples, which is seldom enough for successive sequences to be independent.
 ```@repl sampling_1
 L, q, M = 20, 21, 5; # sequence of lenth 20, 21 amino acids, 5 samples
 g = PottsGraph(L, q, Float64; init=:rand); # random graph

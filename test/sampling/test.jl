@@ -114,8 +114,9 @@ end
     @test tvals == collect(0 .+ (0:(M - 1)))
 
     # The difference between two samples should be 0
-    params = SamplingParameters() # no spacing: every sample at the same time
-    S, _ = mcmc_sample(g, M, params; verbose=-1) # warns about the repeated times
+    params = SamplingParameters()
+    # `spacing=0` puts every sample at the same time, and warns about it
+    S, _ = mcmc_sample(g, M, params; spacing=0, verbose=-1)
     @test all(==(0), map(i -> hamming(S[i - 1], S[i]), 2:M))
 end
 

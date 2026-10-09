@@ -43,9 +43,9 @@ end
         (; kind=:linear, burnin=nothing, spacing=50, n_samples=3)
     @test CLI.normalize_schedule(CLI.parse_tvals(Dict("spacing" => 50, "n_samples" => 3))) ==
         (; kind=:linear, burnin=250, spacing=50, n_samples=3)
-    # and an empty one normalises to a single sample
+    # and an empty one normalises to a single sample, one step after a 5-step burn-in
     @test CLI.normalize_schedule(CLI.parse_tvals(Dict{String,Any}())) ==
-        (; kind=:linear, burnin=0, spacing=0, n_samples=1)
+        (; kind=:linear, burnin=5, spacing=1, n_samples=1)
     @test CLI.parse_tvals(
         Dict("kind" => "linear", "burnin" => 10, "spacing" => 5, "n_samples" => 2)
     ) == (; kind=:linear, burnin=10, spacing=5, n_samples=2)
@@ -151,9 +151,9 @@ end
         spec = CLI.resolve_schedule(cli_args(; n_samples=2, spacing=4), empty_file)
         @test spec.burnin == 20.0
 
-        # nothing at all: a single sample
+        # nothing at all: a single sample, with mcmc_sample's own defaults
         @test CLI.resolve_schedule(cli_args(), empty_file) ==
-            (; kind=:linear, burnin=0, spacing=0, n_samples=1)
+            (; kind=:linear, burnin=5, spacing=1, n_samples=1)
         # the spec's field order is canonical, so equal schedules compare equal
         @test keys(CLI.resolve_schedule(cli_args(; n_samples=2, spacing=1), empty_file)) ==
             (:kind, :burnin, :spacing, :n_samples)

@@ -5,7 +5,7 @@
 """
     mcmc_sample(
         g::PottsGraph, M::Integer, s0::AbstractSequence, params::SamplingParameters;
-        spacing=0, burnin=5*spacing,
+        spacing=1, burnin=5*spacing,
         rng=Random.GLOBAL_RNG, verbose=0, progress_meter=true, pack_output=true,
         translate_output=false,
     )
@@ -30,9 +30,11 @@ value of `tvals` acts as the burn-in, and the following ones are absolute times,
 any `AbstractVector` will do, so `range`, `logrange` or a hand-written vector all work. Can
 also be used with the `init` kwarg.
 
-The schedule is *not* part of `params`: `SamplingParameters` describes how a step is taken,
-while `spacing`/`burnin`/`tvals` say when samples are taken. For `:discrete` sampling, times
-are numbers of mcmc steps and must be whole numbers.
+The schedule is *not* part of `params`: `SamplingParameters` describes *how* a step is taken,
+while `spacing`/`burnin`/`tvals` say *when* samples are taken. You are expected to give one:
+`spacing` defaults to 1, a single mcmc step between samples, which is seldom enough for
+successive samples to be independent. For `:discrete` sampling, times are numbers of mcmc steps
+and must be whole numbers.
 
 
 If `pack_output`, the sequences are wrapped into a [`SequenceSample`](@ref), otherwise
@@ -54,7 +56,7 @@ function mcmc_sample(
     M::Integer,
     s0::AbstractSequence,
     params;
-    spacing=0,
+    spacing=1,
     burnin=5 * spacing,
     kwargs...,
 )

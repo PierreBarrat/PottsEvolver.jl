@@ -13,6 +13,11 @@ built, so they cannot drift from `pottsevolver --help`.
 Each table is complete for its subcommand: the options shared by both appear in both. Every
 command also accepts `-h`/`--help`, which prints the same information and exits.
 
+A default of `–` means the option is simply unset, which is not always the same as having no
+effect: the schedule options (`-M`, `--spacing`, `--burnin`) then fall back to the `[schedule]`
+table of the parameter file, and to the values named in their descriptions if that is absent
+too.
+
 ```@eval
 using PottsEvolver, Markdown
 

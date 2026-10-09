@@ -132,7 +132,7 @@ The two cannot be combined, and either can also come from the parameter file - s
 | Option | Default | Description |
 |--------|---------|-------------|
 | `-M`, `--n-samples` | `1` | Number of samples |
-| `--spacing` | `0` | Time between samples |
+| `--spacing` | `1` | Time between samples |
 | `--tvals` | — | Explicit schedule as space-separated numbers, the first being the burn-in |
 | `--tvals-file` | — | The same, read from a file with one value per line |
 
@@ -230,9 +230,12 @@ n_samples = 100
 ```
 
 Flags win over the file, entry by entry, so the line above with `-M 200` reuses the file's
-`spacing` and `burnin` and takes 200 samples instead. `--burnin` defaults to `5 * spacing`, and
-`--spacing` to 0 — which puts every sample at the same time, and warns, since no mcmc step
-happens between them.
+`spacing` and `burnin` and takes 200 samples instead. `--burnin` defaults to `5 * spacing`.
+
+You are expected to set the schedule yourself: `--spacing` defaults to 1, a single mcmc step
+between samples, which is seldom enough for successive sequences to be independent. Setting it
+to 0 is allowed and puts every sample at the same time, but warns, since no step happens
+between them.
 
 The file also accepts the same schedule said the other way round — first and last sample
 instead of the step between them:
