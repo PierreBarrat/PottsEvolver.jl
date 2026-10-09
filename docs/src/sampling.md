@@ -158,30 +158,102 @@ will first multiply each branch in the tree by a factor `L` (length of the seque
 Discrete sampling is quite straightforward: the time corresponds to a discrete number of mcmc steps. 
 In continuous time however, it is customary to scale time so that the expected number of mutations per site per unit of time is 1. 
 This is done by setting the `substitution_rate` field of `SamplingParameters`, see [Generative continuous time model reveals epistatic signatures in protein evolution](https://doi.org/10.1101/2025.09.17.676821).
-This average substituion rate can be computed either by sampling the potts model or by using an existing set of sequences. 
+That rate is usually written ``\Omega``, and has to be computed for the model at hand before
+sampling from it: see [The substitution rate Ω](@ref).
+
+## The substitution rate Ω
+
+### What it is
+
+```math
+\Omega = \Big\langle \sum_{i=1}^{L} \sum_{a=1}^{q} Q(\mathbf{s} \to \mathbf{s}^{(i,a)}) \Big\rangle_{\mathbf{s}}
+```
+
+the total rate at which a sequence leaves its current state, averaged over sequences.
+Passing it as `substitution_rate` rescales time so that one unit of time is one expected
+substitution per site, which is what makes times — and the branch lengths of a tree —
+comparable to those of standard phylogenetic models. Continuous sampling refuses to run
+without it, since otherwise time has no defined unit.
+
+The average has to be taken over the sequences the process actually visits, *i.e.* over its
+equilibrium distribution. Two things can stand in for that: a sample of the model itself, or
+an alignment of natural sequences, if you are willing to assume they are at equilibrium under
+the model.
+
+### Computing it
+
+[`average_transition_rate`](@ref) does the averaging. Either hand it the sequences, or let it
+draw them for you:
 
 ```@repl sampling_1
-n_samples = 100 # compute the average transition rate from 100 samples
-spacing = 10*L; # discrete steps between samples
+n_samples = 100; # average over 100 sequences
 step_type = :glauber;
 
-Ω_1 = let 
-    # first generate sample with discrete time, then use it to compute the average rate
+Ω_1 = let # sample the model first, then average over the result
     s0 = AASequence(L)
     params = SamplingParameters(; sampling_type=:discrete)
-    S = mcmc_sample(g, M, params; spacing, init=s0, pack_output=false).sequences
-    # compute the average transition rate from the sampled sequences
-    PottsEvolver.average_transition_rate(g, step_type, S)
+    S = mcmc_sample(g, n_samples, params; spacing=10*L, init=s0, pack_output=false).sequences
+    average_transition_rate(g, step_type, S)
 end
 
-Ω_2 = let
-    # call the average_transition_rate function directly, which will sample the potts model
-    s0 = AASequence(L)
-    PottsEvolver.average_transition_rate(g, step_type, s0; n_samples)
+Ω_2 = let # same thing, with the sampling done for you
+    average_transition_rate(g, step_type, AASequence(L); n_samples)
 end
 ```
 
-Now, define `SamplingParameters(; sampling_type=:continuous, substitution_rate=Ω_1)` to have a time-normalized MCMC. 
+For natural sequences, read them yourself and pass the vector:
+
+```julia
+using FASTX
+S = [AASequence(sequence(rec)) for rec in FASTAReader(open(fastafile))]
+Ω = average_transition_rate(g, :glauber, S)
+```
+
+Then sample with `SamplingParameters(; sampling_type=:continuous, substitution_rate=Ω_1)`.
+
+### With a mutation matrix
+
+An asymmetric `mutation_matrix` ``\mu`` moves the equilibrium away from the Potts model and
+towards mutation-selection balance. This breaks the second form above: it draws its sequences
+with a *discrete* chain, and discrete sampling ignores `mutation_matrix` entirely, so it would
+average ``\mu``-weighted rates over Potts-equilibrium sequences. Use the first form, and pass
+the matrix to both halves — `average_transition_rate` defaults to `mutation_matrix=nothing`
+and will otherwise return the wrong number without complaining.
+
+That leaves an apparent chicken-and-egg problem: sampling the right equilibrium needs the
+``\Omega`` you are trying to compute. It is milder than it looks, because ``\Omega`` only
+rescales time. The substitution made at each step is drawn from the *unscaled* rates, so the
+sequence of states visited — and hence the equilibrium being sampled — does not depend on the
+value supplied. Any positive one gives a correctly distributed sample.
+
+What it does change is the clock, and so how much sampling a requested time buys:
+
+```math
+n_{\rm subs} \approx T \, L \, \Omega_{\rm true} / \Omega_{\rm provisional}
+```
+
+An overestimated ``\Omega`` therefore does proportionally less work than asked, and the sample
+may not be equilibrated at all. In practice:
+
+1. Sample with a provisional ``\Omega`` — the Potts value above is a reasonable starting point,
+   and deliberately scaling it *down* is the safe direction, since underestimating oversamples.
+2. Judge equilibration in substitutions rather than in time, with
+   `sum(x -> x.number_substitutions, result.info)` against however many substitutions per site
+   you expect to need.
+3. Compute ``\Omega`` from that sample, then sample again with it. Only now can `spacing` be
+   chosen larger than the equilibration time in meaningful units, so the second sample is the
+   one to use. Recomputing ``\Omega`` from it is a free consistency check: it should agree.
+
+```julia
+params = SamplingParameters(;
+    sampling_type=:continuous, step_type=:glauber,
+    mutation_matrix=μ, substitution_rate=Ω_potts/10, # deliberately low: oversample
+    track_substitutions=true,
+)
+result = mcmc_sample(g, 500, params; spacing=10, burnin=1000, init=s0, pack_output=false)
+sum(x -> x.number_substitutions, result.info) # enough substitutions to equilibrate?
+Ω = average_transition_rate(g, :glauber, result.sequences; mutation_matrix=μ)
+```
 
 ---
 
