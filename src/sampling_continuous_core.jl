@@ -301,7 +301,7 @@ function check_mutation_matrix(μ::AbstractMatrix, sequence::AbstractSequence)
     return nothing
 end
 function check_mutation_matrix(::AbstractMatrix, ::CodonSequence)
-    throw(
+    return throw(
         ArgumentError("Mutation matrices are not yet supported for codon sequences.")
     )
 end

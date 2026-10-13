@@ -326,7 +326,7 @@ function Base.getproperty(x::NumSequence{T,q}, sym::Symbol) where {T,q}
     elseif hasproperty(x, sym)
         return getfield(x, sym)
     end
-    throw(ErrorException("type NumSequence has no field $sym"))
+    return throw(ErrorException("type NumSequence has no field $sym"))
 end
 
 #=========================================================================#
@@ -378,10 +378,12 @@ end
 
 function Base.string(::NumSequence)
     return throw(
-        ArgumentError("""
-        A `NumSequence` has no symbolic representation and cannot be converted to a `String`.
-        Use `AASequence` or `CodonSequence`, or access the integers with `sequence(s)`.
-        """),
+        ArgumentError(
+            """
+A `NumSequence` has no symbolic representation and cannot be converted to a `String`.
+Use `AASequence` or `CodonSequence`, or access the integers with `sequence(s)`.
+"""
+        ),
     )
 end
 

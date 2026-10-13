@@ -111,7 +111,9 @@ function Base.:(==)(X::SequenceSample, Y::SequenceSample)
     return typeof(X) == typeof(Y) && X.data == Y.data && X.labels == Y.labels
 end
 
-Base.copy(X::SequenceSample{S,T}) where {S,T} = SequenceSample{S,T}(copy(X.data), copy(X.labels))
+function Base.copy(X::SequenceSample{S,T}) where {S,T}
+    return SequenceSample{S,T}(copy(X.data), copy(X.labels))
+end
 
 """
     sequence_type(X::SequenceSample)
@@ -131,8 +133,12 @@ function Base.show(io::IO, x::MIME"text/plain", X::SequenceSample{S,T}) where {S
 end
 
 # Rebuild a sequence object from one column, used when writing to fasta.
-_sequence_from_column(::SequenceSample{S}, col) where {S<:AASequence} = AASequence(collect(col))
-_sequence_from_column(::SequenceSample{S}, col) where {S<:RNASequence} = RNASequence(collect(col))
+function _sequence_from_column(::SequenceSample{S}, col) where {S<:AASequence}
+    return AASequence(collect(col))
+end
+function _sequence_from_column(::SequenceSample{S}, col) where {S<:RNASequence}
+    return RNASequence(collect(col))
+end
 function _sequence_from_column(::SequenceSample{S}, col) where {S<:CodonSequence}
     return CodonSequence(collect(col); source=:codon)
 end

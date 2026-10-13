@@ -68,7 +68,7 @@ function load_params(path::AbstractString)
                         spacing = <time between samples>
                         burnin = <time before the first sample>
                         n_samples = <number of samples>
-                    """,
+                    """
                 ),
             )
         elseif k == "branchlength_meaning"
@@ -134,13 +134,21 @@ function load_init(
     @argcheck isfile(file) "No such file: `$file`"
     s = _read_fasta_sequence(file, seqname)
 
-    T = isnothing(init_type) ? _infer_sequence_type(s, g) : _sequence_type_from_name(init_type)
+    T = if isnothing(init_type)
+        _infer_sequence_type(s, g)
+    else
+        _sequence_type_from_name(init_type)
+    end
     return T(s)
 end
 
 function _split_init_path(init::AbstractString)
     parts = split(init, ","; limit=2)
-    return length(parts) == 2 ? (String(parts[1]), String(parts[2])) : (String(parts[1]), nothing)
+    return if length(parts) == 2
+        (String(parts[1]), String(parts[2]))
+    else
+        (String(parts[1]), nothing)
+    end
 end
 
 function _read_fasta_sequence(file::AbstractString, seqname::Nothing)
@@ -169,7 +177,11 @@ function _sequence_type_from_name(init_type::AbstractString)
     elseif init_type == "rna"
         RNASequence
     else
-        throw(ArgumentError("Unknown `--init-type` `$init_type`. Expected `aa`, `codon` or `rna`."))
+        throw(
+            ArgumentError(
+                "Unknown `--init-type` `$init_type`. Expected `aa`, `codon` or `rna`."
+            ),
+        )
     end
 end
 
@@ -206,17 +218,23 @@ function _infer_sequence_type(s::AbstractString, g::PottsGraph)
     if length(matches) == 1
         return only(matches)
     elseif isempty(matches)
-        throw(ArgumentError("""
-            Cannot infer sequence type: content is ambiguous (only `-ACGT`) and its length \
-            ($(length(s))) does not uniquely match the graph (q=$q, L=$L). Pass \
-            `--init-type` explicitly (`aa`, `codon` or `rna`).
-            """))
+        throw(
+            ArgumentError("""
+          Cannot infer sequence type: content is ambiguous (only `-ACGT`) and its length \
+          ($(length(s))) does not uniquely match the graph (q=$q, L=$L). Pass \
+          `--init-type` explicitly (`aa`, `codon` or `rna`).
+          """)
+        )
     else
-        throw(ArgumentError("""
-            Cannot infer sequence type: length $(length(s)) is compatible with more than one \
-            candidate for this graph (q=$q, L=$L). Pass `--init-type` explicitly (`aa`, \
-            `codon` or `rna`).
-            """))
+        throw(
+            ArgumentError(
+                """
+Cannot infer sequence type: length $(length(s)) is compatible with more than one \
+candidate for this graph (q=$q, L=$L). Pass `--init-type` explicitly (`aa`, \
+`codon` or `rna`).
+"""
+            ),
+        )
     end
 end
 
@@ -320,7 +338,7 @@ it with `-p` alone.
 function write_params(path, params; run=nothing, schedule=nothing)
     open(path, "w") do io
         # `Symbol` is not a valid TOML type: `string` converts it, and `sequence_type` too
-        TOML.print(string, io, _params_toml_dict(params; run, schedule); sorted=true)
+        return TOML.print(string, io, _params_toml_dict(params; run, schedule); sorted=true)
     end
     return path
 end
@@ -403,7 +421,7 @@ function write_chain_output(outdir, prefix, result; run=nothing, schedule=nothin
         (dir, name), times = sidecar
         path = output_file(dir, first(splitext(name)), "txt")
         open(path, "w") do io
-            foreach(t -> println(io, t), times)
+            return foreach(t -> println(io, t), times)
         end
         push!(files, path)
         @info "Wrote the sampling times to $path"
@@ -454,7 +472,9 @@ function write_tree_output(outdir, prefix, result; run=nothing, internals=false)
         @info "Wrote the sampled tree to $path"
     end
 
-    push!(files, write_params(output_file(outdir, prefix, "params.toml"), result.params; run))
+    push!(
+        files, write_params(output_file(outdir, prefix, "params.toml"), result.params; run)
+    )
 
     if _tracks_substitutions(result.params)
         @warn """
@@ -481,9 +501,8 @@ function load_tvals(path::AbstractString)
         stripped = strip(line)
         (isempty(stripped) || startswith(stripped, '#')) && continue
         value = tryparse(Float64, stripped)
-        isnothing(value) && throw(
-            ArgumentError("$path, line $n: expected a number, got `$stripped`")
-        )
+        isnothing(value) &&
+            throw(ArgumentError("$path, line $n: expected a number, got `$stripped`"))
         push!(tvals, value)
     end
     return tvals
@@ -519,7 +538,8 @@ function schedule_times(spec)
     # `range`/`logrange` reject a single point unless start == stop, so take it directly
     if spec.kind == :linear && hasproperty(spec, :spacing)
         return collect(
-            spec.burnin .+ range(0, (spec.n_samples - 1) * spec.spacing; length=spec.n_samples)
+            spec.burnin .+
+            range(0, (spec.n_samples - 1) * spec.spacing; length=spec.n_samples),
         )
     end
     spec.n_samples == 1 && return [spec.start]
@@ -588,7 +608,9 @@ end
 
 function _required(table, key)
     haskey(table, key) || throw(
-        ArgumentError("`[schedule]` is missing the `$key` entry (kind=$(get(table, "kind", "linear")))"),
+        ArgumentError(
+            "`[schedule]` is missing the `$key` entry (kind=$(get(table, "kind", "linear")))",
+        ),
     )
     return table[key]
 end
@@ -611,14 +633,16 @@ function write_tvals(spec; prefix_path=nothing)
             "burnin" => spec.burnin,
             "spacing" => spec.spacing,
             "n_samples" => spec.n_samples,
-        ), nothing
+        ),
+        nothing
     elseif spec.kind in (:linear, :log)
         return Dict{String,Any}(
             "kind" => string(spec.kind),
             "start" => spec.start,
             "stop" => spec.stop,
             "n_samples" => spec.n_samples,
-        ), nothing
+        ),
+        nothing
     end
 
     # explicit: inline a schedule that was typed out, keep a file one as a file
@@ -796,9 +820,8 @@ function setup_run(args)
     @info "Building the initial sequence from `$(args["init"])`"
     s0 = load_init(args["init"], args["init-type"], g; rng)
 
-    args["compute-omega"] && compute_omega!(
-        params, g, s0; rng, progress_meter=args["verbose"] >= 1
-    )
+    args["compute-omega"] &&
+        compute_omega!(params, g, s0; rng, progress_meter=args["verbose"] >= 1)
 
     return (; g, params, s0, rng, seed)
 end
@@ -910,8 +933,9 @@ function (@main)(ARGS)
             catch err
                 if !(err isa _USER_ERRORS)
                     # not the user's fault: keep the stacktrace
-                    @error "pottsevolver failed - this is likely a bug" exception =
-                        (err, catch_backtrace())
+                    @error "pottsevolver failed - this is likely a bug" exception = (
+                        err, catch_backtrace()
+                    )
                     rethrow()
                 end
                 # `@error` reaches both the console and the log file, so one message is enough

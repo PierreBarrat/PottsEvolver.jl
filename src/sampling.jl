@@ -191,11 +191,7 @@ function mcmc_sample(
         return (;
             tree=sampled_tree,
             leaf_sequences=fmt_output(
-                leaf_sequences,
-                pack_output,
-                translate_output;
-                names=leaf_names,
-                dict=true,
+                leaf_sequences, pack_output, translate_output; names=leaf_names, dict=true
             ),
             internal_sequences=fmt_output(
                 internal_sequences,

@@ -196,11 +196,11 @@ function _symbolic_alphabet_from_chars(chars)
     for alphabet in _SYMBOLIC_ALPHABETS
         Set(symbols(alphabet)) == cset && return alphabet
     end
-    throw(
+    return throw(
         ArgumentError("""
         State symbols $(sort(collect(cset))) match no known symbolic alphabet.
         Known: $(join(map(a -> "\"$(prod(symbols(a)))\"", _SYMBOLIC_ALPHABETS), ", ")).
-        """),
+        """)
     )
 end
 
@@ -209,11 +209,11 @@ function _symbolic_alphabet_from_q(q)
     for alphabet in _SYMBOLIC_ALPHABETS
         length(symbols(alphabet)) == q && return alphabet
     end
-    throw(
+    return throw(
         ArgumentError("""
         No symbolic alphabet has q=$q states, cannot write this graph in symbolic format.
         Known: aa (21), rna (5). Use `format=:numerical` instead.
-        """),
+        """)
     )
 end
 
@@ -222,8 +222,9 @@ let
     letters = prod(unique(reduce(vcat, map(symbols, _SYMBOLIC_ALPHABETS))))
     patterns = Dict(
         :numerical => Regex.(["J [0-9]+ [0-9]+ [0-9]+ [0-9]+", "h [0-9]+ [0-9]+"]),
-        :symbolic =>
-            Regex.(["J [0-9]+ [0-9]+ [$(letters)]+ [$(letters)]+", "h [0-9]+ [$(letters)]"]),
+        :symbolic => Regex.([
+            "J [0-9]+ [0-9]+ [$(letters)]+ [$(letters)]+", "h [0-9]+ [$(letters)]"
+        ]),
     )
     global get_line_patterns() = patterns
 end

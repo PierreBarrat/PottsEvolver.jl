@@ -205,7 +205,7 @@ function fmt_output(
     return if pack
         # `as_codons=false` stores the translation directly, and tags the sample as
         # holding amino acids
-        SequenceSample(sequences; labels=names, as_codons=!translate)
+        SequenceSample(sequences; labels=names, as_codons=(!translate))
     elseif dict
         Dict{String,T}(string(name) => seq for (name, seq) in zip(names, sequences))
     else

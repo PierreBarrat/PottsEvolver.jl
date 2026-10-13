@@ -217,7 +217,8 @@ Base.show(io::IO, c::Codon) = print(io, "\"$(c.b1)$(c.b2)$(c.b3)\"")
 function Base.show(io::IO, x::MIME"text/plain", c::Codon)
     # `Codon` accepts a gap in any position, so it can hold frameshifts that are absent
     # from the genetic code: check before looking anything up.
-    isvalid(c) || return println(io, "Codon \"$(c.b1)$(c.b2)$(c.b3)\": invalid (frameshift)")
+    isvalid(c) ||
+        return println(io, "Codon \"$(c.b1)$(c.b2)$(c.b3)\": invalid (frameshift)")
 
     aa, iaa = if isstop(c)
         '*', "STOP"
