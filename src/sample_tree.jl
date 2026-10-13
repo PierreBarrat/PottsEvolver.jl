@@ -21,8 +21,8 @@ Return a sampled copy `tree`.
 - If `rootseq` is supplied, use it as the root of the tree.
 - If not, then the `init` kwarg will be used, see `PottsEvolver.get_init_sequence` to
   pick a root sequence.
-  The field `params.burnin` is used to perform initial equilibration of the
-  root sequence (useful if *e.g.* `init=:random_codon`).
+  The `burnin` kwarg (default 0) is a number of mcmc steps used to equilibrate the
+  root sequence before sampling (useful if *e.g.* `init=:random_codon`).
   The code then falls back on the first form.
 """
 function mcmc_sample_continuous_tree(
@@ -31,12 +31,12 @@ function mcmc_sample_continuous_tree(
     params::SamplingParameters;
     init=:random_num,
     rng=Random.default_rng(),
+    burnin=0,
     kwargs...,
 )
     # Pick initial sequence
     s0 = get_init_sequence(init, g; rng)
     # If burnin, then equilibrate the picked sequence first
-    @unpack burnin = params
     if burnin > 0
         @info "Equilibrating root sequence with $(burnin) burnin steps... "
         gibbs_holder = get_gibbs_holder(s0)
@@ -70,8 +70,8 @@ function mcmc_sample_continuous_tree!(
     params::SamplingParameters;
     rng=Random.default_rng(),
 ) where {S<:AbstractSequence}
-    tmp_check_alphabet_consistency(g, data(root(tree)).seq)
     @argcheck params.sampling_type == :continuous
+    check_mutation_matrix(params.mutation_matrix, data(root(tree)).seq)
 
     # logging & warnings
     let
@@ -85,23 +85,16 @@ function mcmc_sample_continuous_tree!(
         """
     end
 
-    @unpack Teq, burnin = params
-    Teq > 0 && @info "Sampling on a tree: `Teq` field in parameters is ignored" Teq
-    burnin > 0 && @info "`burnin` parameter ignored in this specialized function" burnin
-
     # Setting the CTMCState
     rootseq = data(root(tree)).seq
+    @argcheck !isnothing(params.substitution_rate) """
+    Continuous sampling requires `substitution_rate` (Ω) to be set in the parameters.
+    Compute it with `average_transition_rate(g, step_type, rootseq)` and pass it as
+    `SamplingParameters(; ..., substitution_rate=Ω)`.
+    """
+    @info "Using average model substitution rate $(params.substitution_rate)"
     state = CTMCState(rootseq)
-    state.R = if !isnothing(params.substitution_rate)
-        @info "Using provided average model substitution rate $(params.substitution_rate)"
-        params.substitution_rate
-    else
-        @info "Computing average substitution rate for the model using discrete sampling..."
-        (; value, time) = @timed average_transition_rate(g, params.step_type, rootseq; rng)
-        @info "Done in $time seconds"
-        @info "Average substitution rate: $value"
-        value
-    end
+    state.R = params.substitution_rate
 
     # Sampling
     time = @elapsed sample_children_continuous!(root(tree), g, params, state; rng)
@@ -119,7 +112,9 @@ function sample_children_continuous!(
         # mcmc using it as an init
         state.seq = s0 # state is uninitialised, this just avoids allocation
         state.previous_seq = nothing # to make sure not to take state seriously
-        mcmc_steps!(state, g, branch_length(c), params.step_type; kwargs...)
+        mcmc_steps!(
+            state, g, branch_length(c), params.step_type; params.mutation_matrix, kwargs...
+        )
         # copy result to child
         data!(c, Sequence(state.seq))
         # recursive
@@ -140,8 +135,8 @@ Return a sampled copy `tree`.
 - If `rootseq` is supplied, use it as the root of the tree.
 - If not, then the `init` kwarg will be used, see `PottsEvolver.get_init_sequence` to
   pick a root sequence.
-  The field `params.burnin` is used to perform initial equilibration of the
-  root sequence (useful if *e.g.* `init=:random_codon`).
+  The `burnin` kwarg (default 0) is a number of mcmc steps used to equilibrate the
+  root sequence before sampling (useful if *e.g.* `init=:random_codon`).
   The code then falls back on the first form.
 """
 function mcmc_sample_tree(
@@ -150,12 +145,12 @@ function mcmc_sample_tree(
     params::SamplingParameters;
     init=:random_num,
     rng=Random.default_rng(),
+    burnin=0,
     kwargs...,
 )
     # Pick initial sequence
     s0 = get_init_sequence(init, g; rng)
     # If burnin, then equilibrate the picked sequence first
-    @unpack burnin = params
     if burnin > 0
         @info "Equilibrating root sequence with $(burnin) burnin steps... "
         gibbs_holder = get_gibbs_holder(s0)
@@ -192,7 +187,6 @@ function mcmc_sample_tree!(
     params::SamplingParameters;
     rng=Random.default_rng(),
 ) where {S<:AbstractSequence}
-    tmp_check_alphabet_consistency(g, data(root(tree)).seq)
     @argcheck params.sampling_type == :discrete
 
     # logging & warnings
@@ -209,9 +203,6 @@ function mcmc_sample_tree!(
             - branch length meaning = $(params.branchlength_meaning)
         """
     end
-
-    @unpack Teq, burnin = params
-    Teq > 0 && @info "Sampling on a tree: `Teq` field in parameters is ignored" Teq
 
     # some settings
     gibbs_holder = get_gibbs_holder(data(root(tree)).seq)
@@ -301,21 +292,26 @@ function _pernode_alignment(data::Vector{Dict{String,T}}) where {T<:AbstractSequ
     return out
 end
 
-function _pernode_alignment(data::Vector{T}) where {T<:Alignment}
-    @argcheck allequal(A -> A.alphabet, data)
-    alphabet = first(data).alphabet
-    labels = first(data).names
-    L, N_nodes = size(first(data))
+function _pernode_alignment(data::Vector{S}) where {S<:SequenceSample}
+    @argcheck allequal(X -> sort(X.labels), data) """
+        All samples must cover the same set of node labels
+        """
+    labels = first(data).labels
+    L, _ = size(first(data))
     M = length(data) # number of trees
+    T = eltype(first(data).data)
 
-    out = Dict{String,T}()
-    for (i, label) in enumerate(labels)
+    # one label -> column lookup per sample, instead of a linear scan per (node, tree)
+    columns = map(X -> Dict(l => i for (i, l) in enumerate(X.labels)), data)
+
+    out = Dict{String,S}()
+    for label in labels
         # construct data matrix for this node
-        D = zeros(Int, L, M)
+        D = Matrix{T}(undef, L, M)
         for m in 1:M
-            D[:, m] .= find_sequence(label, data[m])[2] # data[m] is an Alignment
+            D[:, m] .= view(data[m].data, :, columns[m][label])
         end
-        out[label] = T(; data=D, alphabet, names=1:M)
+        out[label] = S(D, string.(1:M))
     end
     return out
 end

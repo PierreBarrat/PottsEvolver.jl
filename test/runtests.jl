@@ -2,10 +2,9 @@ using Test
 using PottsEvolver
 
 using Accessors
-using BioSequenceMappings
+using ArgParse
 using Logging
 using Random
-using StatsBase
 using TreeTools
 
 @testset "PottsEvolver.jl" begin
@@ -31,6 +30,10 @@ using TreeTools
 
     @testset "Sampling on tree" begin
         include("sampling_tree/test.jl")
+    end
+
+    @testset "CLI" begin
+        include("cli/test.jl")
     end
 end
 

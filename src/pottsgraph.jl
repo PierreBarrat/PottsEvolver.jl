@@ -4,60 +4,38 @@
 - Array `J` of dimensions `q x q x L x L` and eltype `T`
 - Array `h` of dimensions `q x L` and eltype `T`
 - Inverse temperature `β`
-- `alphabet`
 """
 @kwdef mutable struct PottsGraph{T<:AbstractFloat}
     J::Array{T,4}
     h::Array{T,2}
     β::T = 1.0
-    alphabet::Union{Nothing,Alphabet{Char,<:Integer}} = aa_alphabet
-    function PottsGraph(J::Array{T,4}, h::Array{T,2}, β, alphabet) where {T}
+    function PottsGraph(J::Array{T,4}, h::Array{T,2}, β) where {T}
         @argcheck size(h, 1) == size(J, 1) == size(J, 2) """
             Inconsistent sizes for `J` and `h`: $(size(J)) - $(size(h))
             """
         @argcheck size(h, 2) == size(J, 3) == size(J, 4) """
             Inconsistent sizes for `J` and `h`: $(size(J)) - $(size(h))
             """
-        @argcheck isnothing(alphabet) || size(h, 1) == length(alphabet) """
-            Inconsistent alphabet size: $(length(alphabet)) - h: $(size(h))
-            """
-        return new{T}(J, h, β, alphabet)
+        return new{T}(J, h, β)
     end
 end
 
 """
-    PottsGraph(L, q[, T]; init = :null, alphabet)
+    PottsGraph(L, q[, T]; init = :null)
 
 Return a `PottsGraph{T}` of the required size.
 - `init == :null`: parameters are intialized to zero.
-- `init == :rand`: parameters are randomly sampled using `Jrand` and `hrand` keywords.
-
-`alphabet` is `aa_alphabet` if `q=21`, `nothing` otherwise.
-
-## Random initialization
-
-- `hrand` should be a function `q -> h`.
-- `Jrand` should be a function `q -> J`.
-
-`Jrand` does not have to return a symetric matrix.
-The output matrix is made symetric with zeroes on the diagonal blocks.
-
+- `init == :rand`: parameters are randomly sampled, with `h` of order `1/sqrt(L)` and `J`
+  of order `1/L`. The couplings are made symetric with zeroes on the diagonal blocks.
 """
-function PottsGraph(
-    L,
-    q,
-    T=FloatType;
-    rng=Random.default_rng(),
-    init=:null,
-    Jrand=N -> 1 / L * randn(rng, N, N),
-    hrand=N -> 1 / sqrt(L) * randn(rng, N),
-    alphabet=(q == 21 ? aa_alphabet : nothing),
-)
+function PottsGraph(L, q, T=FloatType; rng=Random.default_rng(), init=:null)
     return if init == :null
-        PottsGraph(; J=zeros(T, q, q, L, L), h=zeros(T, q, L), alphabet)
+        PottsGraph(; J=zeros(T, q, q, L, L), h=zeros(T, q, L))
     elseif init == :rand
-        J, h = _random_graph(rng, L, q)
-        PottsGraph(; J, h, alphabet)
+        J, h = _random_graph(rng, L, q, T)
+        PottsGraph(; J, h)
+    else
+        throw(ArgumentError("`init` should be `:null` or `:rand`. Instead :$init"))
     end
 end
 
@@ -65,10 +43,13 @@ function Base.size(g::PottsGraph)
     return (L=size(g.h, 2), q=size(g.h, 1))
 end
 
-_random_graph(L::Integer, q::Integer) = _random_graph(Random.default_rng(), L, q)
-function _random_graph(rng, L, q)
-    h = reshape(randn(rng, L * q), q, L) / sqrt(L)
-    J = reshape(randn(rng, L * L * q * q), q, q, L, L) / L
+function _random_graph(L::Integer, q::Integer, T=FloatType)
+    return _random_graph(Random.default_rng(), L, q, T)
+end
+function _random_graph(rng, L, q, ::Type{T}=FloatType) where {T<:AbstractFloat}
+    # `T(...)` on the divisors: dividing by a `Float64` would promote the result back
+    h = reshape(randn(rng, T, L * q), q, L) / T(sqrt(L))
+    J = reshape(randn(rng, T, L * L * q * q), q, q, L, L) / T(L)
     for i in 1:L
         J[:, :, i, i] .= 0
         for j in (i + 1):L
@@ -173,6 +154,9 @@ function softmax!(X)
     return X
 end
 
+# Shannon entropy (natural log) of a probability vector, with 0 * log(0) ≡ 0.
+_entropy(p) = -sum(x -> iszero(x) ? zero(x) : x * log(x), p)
+
 """
     energy(s, g::PottsGraph)
 
@@ -199,7 +183,7 @@ function Base.show(io::IO, g::PottsGraph{T}) where {T}
 end
 function Base.show(io::IO, x::MIME"text/plain", g::PottsGraph{T}) where {T}
     (; L, q) = size(g)
-    return print(io, "PottsGraph{$T}: dimensions (L=$L, q=$q) -- β=$(g.β) -- $(g.alphabet)")
+    return print(io, "PottsGraph{$T}: dimensions (L=$L, q=$q) -- β=$(g.β)")
 end
 
 """
@@ -211,8 +195,7 @@ independence between the original and the copy.
 function Base.copy(g::PottsGraph{T}) where {T}
     J = convert(Array{T,4}, copy(g.J))
     h = convert(Array{T,2}, copy(g.h))
-    alphabet = isnothing(g.alphabet) ? nothing : copy(g.alphabet)
-    return PottsGraph(J, h, g.β, alphabet)
+    return PottsGraph(J, h, g.β)
 end
 
 """
@@ -243,7 +226,7 @@ function context_dependent_entropy(s::AbstractSequence, g::PottsGraph)
             f[b] = g.β * ΔE
         end
         softmax!(f)
-        CDE += entropy(f)
+        CDE += _entropy(f)
     end
 
     return CDE
@@ -257,8 +240,8 @@ Return a PottsGraph with only fields that fits the single site frequencies in `f
 length of the sequence.
 Pseudocount ratio `pc` is used.
 """
-function profile_model(f1::AbstractMatrix; pc=1e-2, alphabet=nothing)
+function profile_model(f1::AbstractMatrix; pc=1e-2)
     q, L = size(f1)
     h = log.(pc * ones(Float64, q, L) / q + (1 - pc) * f1)
-    return PottsGraph(; J=zeros(q, q, L, L), h, alphabet)
+    return PottsGraph(; J=zeros(q, q, L, L), h)
 end

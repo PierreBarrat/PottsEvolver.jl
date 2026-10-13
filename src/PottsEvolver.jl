@@ -1,19 +1,15 @@
 module PottsEvolver
 
 using ArgCheck
-using BioSequenceMappings
-using Distributions
 using Logging
 using LoggingExtras
 using PoissonRandom
 using ProgressMeter
 using Random
-using ReadOnlyArrays
-using StatsBase
+using Statistics
 using TreeTools
 using UnPack
 
-export read_fasta, symbols # from BioSequenceMappings
 export read_tree # from TreeTools
 
 import Base: ==, hash, isvalid
@@ -21,19 +17,29 @@ import Base: convert, copy, copy!, show, write
 import Base: getindex, setindex!
 import Base: iterate, length, eltype, size
 
-import BioSequenceMappings: Alignment, to_string, hamming
-export Alignment, Alphabet
+export hamming
 
 # Default types for numerical quantities
 const IntType = Int64
 const FloatType = Float64
 
 include("codons.jl")
-export codon_alphabet, aa_alphabet, nt_alphabet
+export codon_alphabet, aa_alphabet, rna_alphabet, symbols
 export genetic_code
+#! format: off
+# public Q_AA, Q_RNA, Q_CODON
+#! format: on
 
 include("sequences.jl")
-export AbstractSequence, AASequence, CodonSequence, NumSequence
+export AbstractSequence, AASequence, RNASequence, CodonSequence, NumSequence
+
+include("misc.jl")
+
+include("sample_output.jl")
+export SequenceSample
+#! format: off
+# public sequence_type
+#! format: on
 #! format: off
 # public translate
 #! format: on
@@ -73,14 +79,18 @@ export mcmc_sample
 
 include("IO.jl")
 export read_graph, read_potts_graph
+export write_fasta
 
 #=
 - codons.jl: alphabets and genetic code
 - sequences.jl: contain only a vector of Int (or two for CodonSequence).
   Conversion is done through alphabets
-- IO.jl: for reading Potts models -- alignment/sequence IO is done through BioSequenceMappings
+- IO.jl: for reading/writing Potts models, and for writing sequences to fasta.
+  Reading fasta is left to the user: build sequences from strings with
+  `AASequence(::AbstractString)` / `CodonSequence(::AbstractString)`.
 =#
 
 include("Parallel/Parallel.jl")
+include("CLI.jl")
 
 end

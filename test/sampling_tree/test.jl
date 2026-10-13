@@ -61,8 +61,6 @@ end
         params = SamplingParameters(;
             sampling_type=:discrete,
             step_meaning=:changed,
-            Teq=5, # Teq & burnin should not matter!
-            burnin=100,
             branchlength_meaning,
         )
         tree = PottsEvolver.mcmc_sample_tree!(g, tree, params)
@@ -77,7 +75,7 @@ end
         tree = PottsEvolver.prepare_tree(balanced_binary_tree(8, 1.0), rootseq)
         @test all(node -> length(data(node).seq) == 0, nodes(tree; skiproot=true))
         params = SamplingParameters(;
-            sampling_type=:continuous, step_type=:glauber, Teq=5, burnin=100
+            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0
         )
         tree = PottsEvolver.mcmc_sample_continuous_tree!(g, tree, params)
         @test all(node -> length(data(node).seq) == L, nodes(tree; skiproot=true))
@@ -90,9 +88,7 @@ end
     tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
 
     @testset "Discrete" begin
-        params = SamplingParameters(;
-            sampling_type=:discrete, step_meaning=:changed, Teq=1, burnin=100
-        )
+        params = SamplingParameters(; sampling_type=:discrete, step_meaning=:changed)
         # providing root sequence
         rootseq = CodonSequence(L)
         sampled_tree = PottsEvolver.mcmc_sample_tree(g, tree, rootseq, params) # burnin should not matter
@@ -102,12 +98,12 @@ end
 
         # providing init kwarg and burnin
         rootseq = PottsEvolver.NumSequence(L, q)
-        sampled_tree = PottsEvolver.mcmc_sample_tree(g, tree, params; init=rootseq)
+        sampled_tree = PottsEvolver.mcmc_sample_tree(g, tree, params; init=rootseq, burnin=100)
         @test tree !== sampled_tree # should be a copy
         @test data(root(sampled_tree)).seq != rootseq # finite burnin: with probability ≈1 they should be different
 
         # providing init kwarg and no burnin
-        params = SamplingParameters(; step_meaning=:accepted, Teq=0, burnin=0)
+        params = SamplingParameters(; step_meaning=:accepted) # burnin defaults to 0
         sampled_tree = @test_logs min_level = Logging.Warn PottsEvolver.mcmc_sample_tree(
             g, tree, params; init=:random_aa
         )
@@ -115,7 +111,7 @@ end
 
     @testset "Continuous" begin
         params = SamplingParameters(;
-            sampling_type=:continuous, step_meaning=:changed, Teq=1, burnin=100
+            sampling_type=:continuous, step_meaning=:changed, substitution_rate=1.0
         )
         # providing root sequence
         rootseq = CodonSequence(L)
@@ -127,15 +123,15 @@ end
         # providing init kwarg and burnin
         rootseq = PottsEvolver.NumSequence(L, q)
         sampled_tree = PottsEvolver.mcmc_sample_continuous_tree(
-            g, tree, params; init=rootseq
+            g, tree, params; init=rootseq, burnin=100
         )
         @test tree !== sampled_tree # should be a copy
         @test data(root(sampled_tree)).seq != rootseq # finite burnin: with probability ≈1 they should be different
 
         # providing init kwarg and no burnin
         params = SamplingParameters(;
-            sampling_type=:continuous, step_meaning=:accepted, Teq=0, burnin=0
-        )
+            sampling_type=:continuous, step_meaning=:accepted, substitution_rate=1.0
+        ) # burnin defaults to 0
         sampled_tree = @test_logs min_level = Logging.Warn PottsEvolver.mcmc_sample_continuous_tree(
             g, tree, params; init=:random_aa
         )
@@ -147,10 +143,10 @@ end
     M = 5
     g = PottsGraph(L, q; init=:rand)
     tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
-    params = SamplingParameters(; step_meaning=:changed, Teq=0)
+    params = SamplingParameters(; step_meaning=:changed)
 
     # Test for 'raw' sequence output
-    data_pertree = mcmc_sample(g, tree, M, params; init=:random_aa, alignment_output=false)
+    data_pertree = mcmc_sample(g, tree, M, params; init=:random_aa, pack_output=false)
     data_pernode = PottsEvolver.pernode_alignment(data_pertree)
     for nlabel in map(label, nodes(tree)), m in 1:M
         # m represents the tree, *i.e.* the sampling realization
@@ -161,17 +157,15 @@ end
         end
     end
 
-    # for alignment output
-    data_pertree = mcmc_sample(
-        g, tree, M, params; init=:random_codon, alignment_output=true
-    )
+    # for packed (SequenceSample) output
+    data_pertree = mcmc_sample(g, tree, M, params; init=:random_codon, pack_output=true)
     data_pernode = PottsEvolver.pernode_alignment(data_pertree)
     for nlabel in map(label, nodes(tree)), m in 1:M
         # m represents the tree, *i.e.* the sampling realization
         seq_left = if isleaf(tree[nlabel])
-            find_sequence(nlabel, data_pertree[m].leaf_sequences)[2]
+            data_pertree[m].leaf_sequences[nlabel]
         else
-            find_sequence(nlabel, data_pertree[m].internal_sequences)[2]
+            data_pertree[m].internal_sequences[nlabel]
         end
         @test seq_left == data_pernode.sequences[nlabel][m]
     end

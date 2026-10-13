@@ -4,7 +4,7 @@
 
 const VALID_STEP_TYPES = [:gibbs, :metropolis, :glauber, :sqrt]
 const VALID_STEP_MEANINGS = [:proposed, :accepted, :changed]
-const VALID_STEP_TYPES_CONTINUOUS = [:metropolis, :glauber, :sqrt, :gibbs]
+const VALID_STEP_TYPES_CONTINUOUS = [:metropolis, :glauber, :sqrt, :gibbs, :mutsel]
 const VALID_STEP_TYPES_DISCRETE = [:gibbs]
 
 """
@@ -74,28 +74,30 @@ end
 """
     mutable struct SamplingParameters
 
+`SamplingParameters` describes *how* an mcmc step is taken. *When* samples are taken is not
+part of it: the sampling schedule is given to `mcmc_sample` directly, as a number of samples
+with a `spacing` and a `burnin`, or as an explicit vector of times. See `?mcmc_sample`.
+
 Construct using keyword arguments:
 ```
 sampling_type::Symbol = :discrete
 step_type::Symbol = :gibbs
-Teq::Real = 0 # time between samples, for chain
-burnin::Real = 5*Teq # time before first sample
 step_meaning::Symbol = :accepted # relevant for :discrete
 fraction_gap_step::Float64 = 0.9 # relevant for :discrete and codon sampling
 branchlength_meaning::BranchLengthMeaning # relevant for :discrete and sampling on a tree
 substitution_rate::Union{Nothing,Float64} = nothing # relevant for :continuous
 track_substitutions::Bool = false # relevant for continuous
+mutation_matrix::Union{Nothing,Matrix{Float64}} = nothing # relevant for :continuous
 ```
 
 `sampling_type` can be `:discrete` or `:continuous`.
-The time between samples is `Teq`, and an extra time `burnin` is taken before the first sample.
 Allowed values of `step_type` differ between the continuous and discrete cases.
 
 ## Discrete sampling
-- `Teq` is measured in swaps: accepted (or attempted) changes of one sequence position.
-  It must be an integer.
-- `burnin`: number of steps starting from the initial sequence before the first sample.
-  Must be an integer.
+
+Time is measured in swaps: accepted (or attempted) changes of one sequence position. Sampling
+times must therefore be integers.
+
 - `step_type`: `:gibbs` only. I intend to implement `:metropolis` and maybe `:glauber`.
 - `step_meaning` (:discrete only): whether a swap count towards equilibration or not.
   It can take three values
@@ -115,24 +117,33 @@ Allowed values of `step_type` differ between the continuous and discrete cases.
 ## Continuous sampling
 
 For continuous sampling, there is no notion of swap/sweep or of accepted/rejected steps.
-Since any positive real number is acceptable as a sampling time, branch lenghts of trees
-can be used directly.
 
-- `Teq` and `burnin` are floats.
-- `step_type` can be `:metropolis`, `:glauber` or `:sqrt`.
-- `substitution_rate` is the average substitution rate for a given Potts model
+Any positive real number is a valid sampling time, so branch lengths of trees can be used
+directly.
+
+- `step_type` can be `:metropolis`, `:glauber`, `:sqrt`, `:gibbs` or `:mutsel`.
+- `substitution_rate` is the average substitution rate `Ω` for a given Potts model
   (the average runs over sequences).
-  It is the result of `average_substitution_rate`.
-  This is computed automatically if not provided (but takes some time).
+  It is the result of `average_transition_rate`.
+  It **must** be set for continuous sampling: compute it once with
+  `average_transition_rate(g, step_type, s0)` and pass it here.
 - `track_substitutions`: track all substitutions (position, state, time) occuring during
   the Gillespie simulation. They are returned in the `info` output of `mcmc_sample`.
+- `mutation_matrix`: an optional `q x q` matrix `μ` of relative mutation rates (*e.g.*
+  Jukes-Cantor for nucleotides, JTT for amino acids). If provided, the continuous
+  transition rate for the mutation `(i, a) -> (i, b)` is multiplied by `μ[a, b]`.
+  Diagonal entries are ignored, off-diagonal entries must be non-negative, and `q` must
+  match the number of states of the sampled sequence.
+  !!! The gap must in general be included: all current alphabets use the gap as state `1`,
+  so `μ` is `q x q` over the *gapped* alphabet (*e.g.* `5x5` over `-ACGU` for RNA,
+  `21x21` for amino acids), not over the non-gap symbols alone.
+  !!! An **asymmetric** `μ` shifts the sampled equilibrium away from the Potts model towards
+  mutation-selection balance. `μ` is only used for continuous sampling.
 
 """
-@kwdef mutable struct SamplingParameters{T<:Real}
+@kwdef mutable struct SamplingParameters
     sampling_type::Symbol = :discrete
     step_type::Symbol = (sampling_type == :discrete ? :gibbs : :glauber)
-    Teq::T = Int(0)
-    burnin::T = 5 * Teq
     # for discrete sampling only
     step_meaning::Symbol = :accepted
     # for the discrete codon algorithm (Gibbs for aa and Metropolis for gaps)
@@ -142,17 +153,17 @@ can be used directly.
     # for continuous sampling only - average substitution rate for a given Potts model
     substitution_rate::Union{Nothing,Float64} = nothing
     track_substitutions::Bool = false
+    mutation_matrix::Union{Nothing,Matrix{Float64}} = nothing
     function SamplingParameters(
         sampling_type,
         step_type,
-        Teq::T,
-        burnin::Real,
         step_meaning,
         fraction_gap_step,
         branchlength_meaning,
         substitution_rate::Union{Nothing,Real},
         track_substitutions::Bool,
-    ) where {T}
+        mutation_matrix::Union{Nothing,AbstractMatrix},
+    )
         step_meaning = try
             Symbol(step_meaning)
         catch err
@@ -161,28 +172,16 @@ can be used directly.
         end
 
         @argcheck sampling_type in (:discrete, :continuous)
-        Type = if sampling_type == :discrete
+        if sampling_type == :discrete
             @argcheck step_type in VALID_STEP_TYPES_DISCRETE """
             For :discrete mcmc, `step_type` should be in $VALID_STEP_TYPES_DISCRETE.
             Instead $(step_type).
             """
-            try
-                Teq = Int(Teq)
-                burnin = Int(burnin)
-            catch err
-                msg = """
-                For :discrete mcmc, `Teq` and `burnin` should be integers.
-                Instead $Teq and $burnin.
-                """
-                throw(ArgumentError(msg))
-            end
-            Int
         elseif sampling_type == :continuous
             @argcheck step_type in VALID_STEP_TYPES_CONTINUOUS """
             For :continuous mcmc, `step_type` should be in $VALID_STEP_TYPES_CONTINUOUS.
             Instead $(step_type).
             """
-            Float64
         end
 
         @argcheck step_meaning in VALID_STEP_MEANINGS """
@@ -192,16 +191,46 @@ can be used directly.
 
         @argcheck isnothing(substitution_rate) || substitution_rate > 0
 
-        return new{Type}(
+        # Mutation matrix: validate the matrix-only properties here (size against the
+        # sequence type is checked at sampling time, see `check_mutation_matrix`).
+        if !isnothing(mutation_matrix)
+            mutation_matrix = convert(Matrix{Float64}, mutation_matrix)
+            @argcheck size(mutation_matrix, 1) == size(mutation_matrix, 2) """
+                `mutation_matrix` must be square. Instead $(size(mutation_matrix)).
+                """
+            # diagonal is ignored (a genuine generator matrix has negative diagonal)
+            @argcheck all(
+                mutation_matrix[a, b] >= 0 for
+                a in axes(mutation_matrix, 1), b in axes(mutation_matrix, 2) if a != b
+            ) "Off-diagonal entries of `mutation_matrix` must be non-negative."
+
+            symmetric = all(
+                isapprox(mutation_matrix[a, b], mutation_matrix[b, a]; atol=1e-8) for
+                a in axes(mutation_matrix, 1), b in axes(mutation_matrix, 2) if a < b
+            )
+            symmetric || @warn """
+                `mutation_matrix` is not symmetric: the sampled equilibrium is no longer the \
+                Potts model but mutation-selection balance. This is a valid model - make sure \
+                it is what you intend.
+                """ maxlog = 1
+
+            if sampling_type == :discrete
+                @warn """
+                    `mutation_matrix` only affects continuous sampling and is ignored by \
+                    discrete sampling.
+                    """
+            end
+        end
+
+        return new(
             sampling_type,
             step_type,
-            Teq,
-            burnin,
             step_meaning,
             fraction_gap_step,
             branchlength_meaning,
             substitution_rate,
             track_substitutions,
+            mutation_matrix,
         )
     end
 end
@@ -210,8 +239,6 @@ function Base.show(io::IO, params::SamplingParameters)
     println(io, typeof(params))
     println(io, "  sampling_type = :$(params.sampling_type)")
     println(io, "  step_type = :$(params.step_type)")
-    println(io, "  Teq = $(params.Teq)")
-    println(io, "  burnin = $(params.burnin)")
 
     if params.sampling_type == :discrete
         println(io, "  step_meaning = :$(params.step_meaning)")
@@ -227,5 +254,8 @@ function Base.show(io::IO, params::SamplingParameters)
             println(io, "  substitution_rate = not set")
         end
         println(io, "  track_substitutions = $(params.track_substitutions)")
+        if !isnothing(params.mutation_matrix)
+            println(io, "  mutation_matrix = $(size(params.mutation_matrix)) matrix")
+        end
     end
 end

@@ -18,3 +18,4 @@ example/Manifest.toml
 example/test_notebooks
 profile/*
 .vscode/*
+.claude/*

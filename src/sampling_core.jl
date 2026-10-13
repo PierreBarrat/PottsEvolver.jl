@@ -111,7 +111,7 @@ function aa_gibbs_step!(
 
     if isnothing(new_aas)
         # no valid mutation was found - likely due to all gaps sequence
-        return (i=i, new_state=s[i], accepted=accepted, changed=false)
+        return (i=i, new_state=s[i], accepted=false, changed=false)
     end
 
     # Constructing the gibbs field p
@@ -289,5 +289,6 @@ function _sample_from_weights(rng, W)
 end
 
 get_gibbs_holder(::CodonSequence, T=FloatType) = zeros(T, 4)
-get_gibbs_holder(::AASequence, T=FloatType) = zeros(T, 21)
+get_gibbs_holder(::AASequence, T=FloatType) = zeros(T, Q_AA)
+get_gibbs_holder(::RNASequence, T=FloatType) = zeros(T, Q_RNA)
 get_gibbs_holder(s::NumSequence, T=FloatType) = zeros(T, s.q)

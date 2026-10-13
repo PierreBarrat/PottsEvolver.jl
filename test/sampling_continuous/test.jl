@@ -21,7 +21,7 @@
     end
 
     @testset "Codon sequences" begin
-        q = length(codon_alphabet)
+        q = PottsEvolver.Q_CODON
         g = PottsGraph(L, q; init=:rand)
 
         a = CodonSequence(L)
@@ -29,17 +29,25 @@
         a.aaseq[1] = 1
         ref_ΔE = PottsEvolver.compute_energy_differences(a, g)
 
-        b = copy(a)
         i = 1
-        x = rand(2:q)
-        b.seq[i] = x
-        b.aaseq[i] = genetic_code(x)
-        ΔE_true = PottsEvolver.compute_energy_differences(b, g)
+        # Only codons that encode an amino acid are valid sequence states: `genetic_code`
+        # returns `nothing` for the three stop codons, so there is no `aaseq` entry to store
+        # and `compute_energy_differences!` has no `x_aa` to work with. Drawing from `2:q`
+        # instead picked a stop codon about one run in twenty, which failed with
+        # `Cannot convert an object of type Nothing to an object of type Int64`.
+        # Going over all of them is cheap here, and leaves nothing to chance.
+        for x in PottsEvolver.coding_codons
+            b = copy(a)
+            b[i] = x # sets both `seq` and `aaseq`
+            ΔE_true = PottsEvolver.compute_energy_differences(b, g)
 
-        ΔE_buffer = copy(ref_ΔE)
-        ΔE_test = PottsEvolver.compute_energy_differences!(ΔE_buffer, ref_ΔE, a, i, x, g)
+            ΔE_buffer = copy(ref_ΔE) # `ref_ΔE` itself is only read
+            ΔE_test = PottsEvolver.compute_energy_differences!(
+                ΔE_buffer, ref_ΔE, a, i, x, g
+            )
 
-        @test all(ΔE_test .≈ ΔE_true)
+            @test all(ΔE_test .≈ ΔE_true)
+        end
     end
 
     @testset "_delta_energy" begin
@@ -114,18 +122,72 @@ end
     end
 end
 
+@testset "mutation_matrix" begin
+    L, q = 5, 5
+    g = PottsGraph(L, q; init=:rand)
+    seq = NumSequence(rand(1:q, L), q)
+
+    @testset "rate mechanic" begin
+        # μ multiplies the rate (i, a) -> (i, b) by μ[a, b], with `a` the current state at i
+        μ = rand(q, q)
+        Q0 = PottsEvolver.transition_rates(seq, g, :glauber)
+        Qμ = PottsEvolver.transition_rates(seq, g, :glauber; mutation_matrix=μ)
+        cur = PottsEvolver.sequence(seq)
+        @test all(Qμ[b, i] ≈ Q0[b, i] * μ[cur[i], b] for b in 1:q, i in 1:L)
+    end
+
+    @testset "μ of ones is a no-op" begin
+        μ = ones(q, q)
+        Q0 = PottsEvolver.transition_rates(seq, g, :glauber)
+        Qμ = PottsEvolver.transition_rates(seq, g, :glauber; mutation_matrix=μ)
+        @test Qμ ≈ Q0
+    end
+
+    @testset "wrong size rejected at sampling time" begin
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0,
+            mutation_matrix=ones(q + 1, q + 1),
+        )
+        @test_throws ArgumentError mcmc_sample(g, 3, params; spacing=1.0, init=:random_num)
+    end
+
+    @testset "codon sequences rejected" begin
+        gc = PottsGraph(L, 21; init=:null)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0,
+            mutation_matrix=ones(PottsEvolver.Q_CODON, PottsEvolver.Q_CODON),
+        )
+        @test_throws ArgumentError mcmc_sample(gc, 3, params; spacing=1.0, init=:random_codon)
+    end
+
+    @testset "sampling with μ is reproducible" begin
+        μ = rand(q, q)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0,
+            mutation_matrix=μ,
+        )
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; spacing=1.0, rng, init=:random_num).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; spacing=1.0, rng, init=:random_num).sequences
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+end
+
 @testset "Reproducibility" begin
     @testset "Continuous - Glauber" begin
         L, q = 10, 21
         g = PottsGraph(L, q; init=:null)
         params = SamplingParameters(;
-            sampling_type=:continuous, step_type=:glauber, Teq=1.0
+            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0
         )
         init = :random_aa
         rng = Random.seed!(Xoshiro(123), 42)
-        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        aln_1 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
         rng = Random.seed!(Xoshiro(123), 42)
-        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        aln_2 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
         for i in 1:length(aln_1)
             @test aln_1[i] == aln_2[i]
         end
@@ -133,12 +195,14 @@ end
     @testset "Continuous - Gibbs" begin
         L, q = 10, 21
         g = PottsGraph(L, q; init=:null)
-        params = SamplingParameters(; sampling_type=:continuous, step_type=:gibbs, Teq=1.0)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:gibbs, substitution_rate=1.0
+        )
         init = :random_aa
         rng = Random.seed!(Xoshiro(123), 42)
-        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        aln_1 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
         rng = Random.seed!(Xoshiro(123), 42)
-        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        aln_2 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
         for i in 1:length(aln_1)
             @test aln_1[i] == aln_2[i]
         end
@@ -146,12 +210,14 @@ end
     @testset "Continuous - Sqrt - Codon" begin
         L, q = 10, 21
         g = PottsGraph(L, q; init=:null)
-        params = SamplingParameters(; sampling_type=:continuous, step_type=:sqrt, Teq=1.0)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:sqrt, substitution_rate=1.0
+        )
         init = :random_codon
         rng = Random.seed!(Xoshiro(123), 42)
-        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        aln_1 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
         rng = Random.seed!(Xoshiro(123), 42)
-        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        aln_2 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
         for i in 1:length(aln_1)
             @test aln_1[i] == aln_2[i]
         end
@@ -160,13 +226,29 @@ end
         L, q = 10, 21
         g = PottsGraph(L, q; init=:null)
         params = SamplingParameters(;
-            sampling_type=:continuous, step_type=:metropolis, Teq=1.0
+            sampling_type=:continuous, step_type=:metropolis, substitution_rate=1.0
         )
         init = :random_num
         rng = Random.seed!(Xoshiro(123), 42)
-        aln_1 = mcmc_sample(g, 10, params; rng, init).sequences
+        aln_1 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
         rng = Random.seed!(Xoshiro(123), 42)
-        aln_2 = mcmc_sample(g, 10, params; rng, init).sequences
+        aln_2 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
+        for i in 1:length(aln_1)
+            @test aln_1[i] == aln_2[i]
+        end
+    end
+
+    @testset "Continuous - mutsel - Num" begin
+        L, q = 10, 21
+        g = PottsGraph(L, q; init=:null)
+        params = SamplingParameters(;
+            sampling_type=:continuous, step_type=:mutsel, substitution_rate=1.0
+        )
+        init = :random_num
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_1 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
+        rng = Random.seed!(Xoshiro(123), 42)
+        aln_2 = mcmc_sample(g, 10, params; spacing=1.0, rng, init).sequences
         for i in 1:length(aln_1)
             @test aln_1[i] == aln_2[i]
         end
@@ -177,7 +259,7 @@ end
         g = PottsGraph(L, q; init=:null)
         tree = TreeTools.Generate.balanced_binary_tree(8, 1.0)
         params = SamplingParameters(;
-            sampling_type=:continuous, step_type=:glauber, Teq=1.0
+            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0
         )
         init = :random_codon
         rng = Random.seed!(Xoshiro(123), 42)

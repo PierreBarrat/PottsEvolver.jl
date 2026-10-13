@@ -16,6 +16,8 @@ makedocs(;
         "Index" => "index.md",
         "Potts model" => "pottsgraph.md",
         "Sampling" => "sampling.md",
+        "Command line" => "cli.md",
+        "CLI reference" => "cli_reference.md",
         "Genetic code" => "genetic_code.md",
         "Reference" => "reference.md",
     ],

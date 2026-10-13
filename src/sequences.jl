@@ -16,16 +16,12 @@ Base.iterate(s::AbstractSequence, state) = iterate(sequence(s), state)
 Base.length(s::AbstractSequence) = length(sequence(s))
 Base.eltype(s::AbstractSequence) = eltype(sequence(s))
 
-# used in Alignment
-_sequence_alphabet(::Type{<:AbstractSequence}; kwargs...) = nothing
-
 #=
 Methods that a subtype should implement
 - sequence: access integer vector (necessary if field is not called `seq`)
 - copy !NECESSARY!
 - equality and hash
 - indexing
-- _sequence_alphabet: return default alphabet for the type
 =#
 
 #====================================#
@@ -41,7 +37,7 @@ Wrapper around a vector of integers, with implied alphabet `PottsEvolver.aa_alph
 mutable struct AASequence{T<:Integer} <: AbstractSequence
     seq::Vector{T}
     function AASequence(x::AbstractVector{T}) where {T}
-        q = length(aa_alphabet)
+        q = Q_AA
         @argcheck all(<=(q), x) "AA are represented by `(1..$(q))` integers. Instead, $x"
         return new{T}(x)
     end
@@ -61,13 +57,83 @@ end
 Return a random `AASequence{T}` of length `L`.
 """
 function AASequence(rng::AbstractRNG, L::Integer; T=IntType)
-    return AASequence(rand(rng, T(1):T(length(aa_alphabet)), L))
+    return AASequence(rand(rng, T(1):T(Q_AA), L))
+end
+"""
+    AASequence(s::AbstractString)
+
+Build an `AASequence` from a string of amino acid symbols, *e.g.* `"AC-DE"`.
+Symbols outside of `PottsEvolver.aa_alphabet` raise an error.
+"""
+function AASequence(s::AbstractString; T=IntType)
+    seq = map(collect(s)) do c
+        @argcheck in(c, symbols(aa_alphabet)) """
+            Symbol '$c' is not an amino acid. Expected one of \
+            "$(prod(symbols(aa_alphabet)))".
+            """
+        return aa_alphabet(c)
+    end
+    return AASequence(convert(Vector{T}, seq))
 end
 AASequence(L::Integer; T=IntType) = AASequence(Random.default_rng(), L; T)
 AASequence{T}(rng::AbstractRNG, L::Integer) where {T<:Integer} = AASequence(rng, L; T)
 AASequence{T}(L::Integer) where {T<:Integer} = AASequence(L; T)
 
-_sequence_alphabet(::Type{<:AASequence}; kwargs...) = aa_alphabet
+#====================================#
+############# RNASequence ############
+#====================================#
+
+"""
+    mutable struct RNASequence{T<:Integer} <: AbstractSequence
+
+Field: `seq::Vector{T}`.
+Wrapper around a vector of integers, with implied alphabet `PottsEvolver.rna_alphabet`
+(symbols `"-ACGU"`). Behaves like `AASequence`, but over the RNA alphabet.
+"""
+mutable struct RNASequence{T<:Integer} <: AbstractSequence
+    seq::Vector{T}
+    function RNASequence(x::AbstractVector{T}) where {T}
+        q = Q_RNA
+        @argcheck all(<=(q), x) "RNA is represented by `(1..$(q))` integers. Instead, $x"
+        return new{T}(x)
+    end
+end
+
+Base.copy(s::RNASequence) = RNASequence(copy(s.seq))
+function Base.copy!(dest::RNASequence, source::RNASequence)
+    @argcheck length(dest) == length(source)
+    for (i, a) in enumerate(source.seq)
+        dest.seq[i] = a
+    end
+    return dest
+end
+"""
+    RNASequence(L; T)
+
+Return a random `RNASequence{T}` of length `L`.
+"""
+function RNASequence(rng::AbstractRNG, L::Integer; T=IntType)
+    return RNASequence(rand(rng, T(1):T(Q_RNA), L))
+end
+"""
+    RNASequence(s::AbstractString)
+
+Build an `RNASequence` from a string of RNA symbols, *e.g.* `"AC-GU"`.
+Symbols outside of `PottsEvolver.rna_alphabet` raise an error.
+"""
+function RNASequence(s::AbstractString; T=IntType)
+    seq = map(collect(s)) do c
+        @argcheck in(c, symbols(rna_alphabet)) """
+            Symbol '$c' is not an RNA symbol. Expected one of \
+            "$(prod(symbols(rna_alphabet)))".
+            """
+        return rna_alphabet(c)
+    end
+    return RNASequence(convert(Vector{T}, seq))
+end
+RNASequence(L::Integer; T=IntType) = RNASequence(Random.default_rng(), L; T)
+RNASequence{T}(rng::AbstractRNG, L::Integer) where {T<:Integer} = RNASequence(rng, L; T)
+RNASequence{T}(L::Integer) where {T<:Integer} = RNASequence(L; T)
 
 #=============================================#
 ################ CodonSequence ################
@@ -77,8 +143,8 @@ mutable struct CodonSequence{T<:Integer} <: AbstractSequence
     seq::Vector{T} # the codons
     aaseq::Vector{T} # the translation
     function CodonSequence(seq::Vector{T}, aaseq::Vector{T}) where {T}
-        qc = length(codon_alphabet)
-        qaa = length(aa_alphabet)
+        qc = Q_CODON
+        qaa = Q_AA
         @argcheck all(<=(qc), seq) """
             Codons are represented by `(1..$(qc))` integers. Instead $seq
         """
@@ -131,7 +197,7 @@ Underlying integer type is `T`.
 function CodonSequence(rng::AbstractRNG, L::Int; source=:aa, T=IntType)
     # Base function
     return if source == :aa
-        CodonSequence(rand(rng, T(1):T(length(aa_alphabet)), L); source, rng)
+        CodonSequence(rand(rng, T(1):T(Q_AA), L); source, rng)
     elseif source == :codon
         codons = T.(rand(rng, coding_codons, L))
         CodonSequence(codons; source=:codon, rng) # rng useless in this case
@@ -147,6 +213,26 @@ function CodonSequence{T}(rng::AbstractRNG, L::Int; kwargs...) where {T<:Integer
 end
 function CodonSequence{T}(L::Int; kwargs...) where {T<:Integer}
     return CodonSequence{T}(Random.default_rng(), L, kwargs...)
+end
+"""
+    CodonSequence(s::AbstractString)
+
+Build a `CodonSequence` from a string of nucleotides, *e.g.* `"ATGAAA"`.
+The length of `s` must be a multiple of three. Gap codons are written `"---"`;
+mixing gaps and nucleotides inside a codon is a frameshift and is rejected.
+"""
+function CodonSequence(s::AbstractString; T=IntType)
+    @argcheck length(s) % 3 == 0 """
+        Length of a nucleotide string must be a multiple of 3. Instead $(length(s)).
+        """
+    codons = map(Iterators.partition(s, 3)) do chunk
+        codon = Codon(join(chunk))
+        @argcheck isvalid(codon) """
+            Invalid codon "$(join(chunk))": expected three nucleotides or three gaps.
+            """
+        return codon_alphabet(codon)
+    end
+    return CodonSequence(convert(Vector{T}, codons); source=:codon)
 end
 
 ## Methods
@@ -169,10 +255,6 @@ end
 translate(s::CodonSequence) = AASequence(s.aaseq)
 function sequence(x::CodonSequence; as_codons=true)
     return as_codons ? x.seq : x.aaseq
-end
-
-function _sequence_alphabet(::Type{<:CodonSequence}; as_codons=true)
-    return as_codons ? codon_alphabet : aa_alphabet
 end
 
 #============================================================#
@@ -244,79 +326,70 @@ function Base.getproperty(x::NumSequence{T,q}, sym::Symbol) where {T,q}
     elseif hasproperty(x, sym)
         return getfield(x, sym)
     end
-    throw(ErrorException("type NumSequence has no field $sym"))
-end
-#===========================================================================#
-########################## Converting to Alignment ##########################
-#===========================================================================#
-
-"""
-    Alignment(sequences; alphabet, names, as_codons=true)
-
-Construct a `BioSequenceMappings.Alignment` from a set of sequences.
-If the sequences are `AASequence`, `alphabet` defaults to `aa_alphabet`.
-If they are `CodonSequence`, `as_codons` can be used to decide whether the
-alignment should store codons or amino acids. `alphabet` can be determined automatically
-from this.
-"""
-function Alignment(
-    S::AbstractVector{T};
-    names=nothing,
-    as_codons=true,
-    alphabet=_sequence_alphabet(T; as_codons),
-) where {T<:AbstractSequence}
-    if !allequal(Iterators.map(length, S))
-        error("Sequences do not have the same length")
-    end
-    if !isnothing(names) && length(names) != length(S)
-        error("Got $(length(names)) names but $(length(S)) sequences.")
-    end
-
-    data = hcat([sequence(s; as_codons) for s in S]...)
-
-    return Alignment(data, alphabet; names)
+    return throw(ErrorException("type NumSequence has no field $sym"))
 end
 
-function genetic_code(A::Alignment, alphabet=aa_alphabet)
-    if A.alphabet != codon_alphabet
-        error("""
-            Function should be called on alignment of codon sequences.
-            Instead `A.alphabet`: $(A.alphabet)
-        """)
+#=========================================================================#
+############################ Number of states ############################
+#=========================================================================#
+
+"""
+    n_states(s::AbstractSequence)
+    n_states(::Type{<:AbstractSequence})
+
+Number of states a single position can take: the number of rows of the `q x L` matrices
+used in continuous-time sampling.
+This is `Q_AA` for `AASequence`, `Q_RNA` for `RNASequence`, `Q_CODON` for `CodonSequence`
+(stop and gap codons included), and `q` for `NumSequence{T,q}`.
+"""
+n_states(::Type{<:AASequence}) = Q_AA
+n_states(::Type{<:RNASequence}) = Q_RNA
+n_states(::Type{<:CodonSequence}) = Q_CODON
+n_states(::Type{NumSequence{T,q}}) where {T,q} = q
+n_states(s::AbstractSequence) = n_states(typeof(s))
+
+#=========================================================================#
+########################## Converting to String ##########################
+#=========================================================================#
+
+"""
+    string(s::AASequence)
+    string(s::RNASequence)
+    string(s::CodonSequence; as_aa=false)
+
+Return the symbolic representation of `s`.
+For a `CodonSequence`, the default is the nucleotide string (three characters per position);
+use `as_aa=true` to get the translated amino acid string instead.
+
+Inverse of the `AASequence(::AbstractString)` / `RNASequence(::AbstractString)` /
+`CodonSequence(::AbstractString)` constructors, which is how sequences read from a fasta
+file (using *e.g.* `FASTX`) enter `PottsEvolver`.
+"""
+Base.string(s::AASequence) = String(map(aa_alphabet, s.seq))
+Base.string(s::RNASequence) = String(map(rna_alphabet, s.seq))
+
+function Base.string(s::CodonSequence; as_aa=false)
+    return if as_aa
+        String(map(aa_alphabet, s.aaseq))
+    else
+        join(join(bases(codon_alphabet(c))) for c in s.seq)
     end
-    S = map(x -> genetic_code.(x), A) # this translates to default aa_alphabet
-    if alphabet != aa_alphabet
-        # translate to requested alphabet if needed
-        S = map(x -> BioSequenceMappings.translate(x, aa_alphabet, alphabet))
-    end
-    return Alignment(S, alphabet; A.names, A.weights)
+end
+
+function Base.string(::NumSequence)
+    return throw(
+        ArgumentError(
+            """
+A `NumSequence` has no symbolic representation and cannot be converted to a `String`.
+Use `AASequence` or `CodonSequence`, or access the integers with `sequence(s)`.
+"""
+        ),
+    )
 end
 
 #==================#
 ####### Misc #######
 #==================#
-
-"""
-    hamming(x::AbstractSequence, y::AbstractSequence)
-    hamming(x::CodonSequence, y::CodonSequence; source=:codon, kwargs...)
-"""
-function BioSequenceMappings.hamming(
-    x::AbstractSequence, y::AbstractSequence; source=nothing, kwargs...
-)
-    # source kwarg to allow blind use of hamming
-    return hamming(x.seq, y.seq; kwargs...)
-end
-function BioSequenceMappings.hamming(
-    x::CodonSequence, y::CodonSequence; source=:codon, kwargs...
-)
-    return if source == :codon
-        hamming(x.seq, y.seq; kwargs...)
-    elseif source == :aa
-        hamming(x.aaseq, y.aaseq; kwargs...)
-    else
-        error("Valid `source` values: `:codon` or `:aa`. Instead $source")
-    end
-end
 
 function intvec_to_sequence(s::AbstractVector{<:Integer}; v=true)
     q = maximum(s)

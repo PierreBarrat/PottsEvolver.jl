@@ -27,7 +27,7 @@ function _sample_chains_sequential(
                 inits[i],
                 params;
                 rng,
-                alignment_output=false,
+                pack_output=false,
                 progress_meter=false,
                 store_info=false,
                 kwargs...,
@@ -57,7 +57,7 @@ function _sample_chains_parallel(
                 inits[i],
                 params;
                 rng,
-                alignment_output=false,
+                pack_output=false,
                 progress_meter=false,
                 store_info=false,
                 kwargs...,

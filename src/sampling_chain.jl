@@ -9,7 +9,7 @@ function mcmc_sample_chain(
     params::SamplingParameters;
     rng=Random.default_rng(),
     progress_meter=true,
-    alignment_output=true,
+    pack_output=true,
     translate_output=false,
     store_info=true,
 )
@@ -20,8 +20,7 @@ function mcmc_sample_chain(
     @argcheck issorted(time_steps) && all(>=(0), time_steps) """
     Time steps must be positive and sorted in ascending order. Instead $time_steps
     """
-    tmp_check_alphabet_consistency(g, s0)
-    if !alignment_output && translate_output
+    if !pack_output && translate_output
         error("I have to implement this case")
     end
 
@@ -82,7 +81,7 @@ function mcmc_sample_chain(
     end
     @info "Sampling done in $time seconds"
 
-    sequences = fmt_output(S, alignment_output, translate_output; names=time_steps)
+    sequences = fmt_output(S, pack_output, translate_output; names=time_steps)
     return (;
         sequences,
         tvals=collect(time_steps),
@@ -102,7 +101,7 @@ function mcmc_sample_continuous_chain(
     params::SamplingParameters;
     rng=Random.default_rng(),
     progress_meter=true,
-    alignment_output=true,
+    pack_output=true,
     translate_output=false,
 )
     # Argument checks
@@ -112,10 +111,10 @@ function mcmc_sample_continuous_chain(
     @argcheck issorted(time_steps) && all(>=(0), time_steps) """
     Time steps must be positive and sorted in ascending order. Instead $time_steps
     """
-    tmp_check_alphabet_consistency(g, s0)
-    if !alignment_output && translate_output
+    if !pack_output && translate_output
         error("I have to implement this case")
     end
+    check_mutation_matrix(params.mutation_matrix, s0)
 
     @unpack step_type = params
 
@@ -135,27 +134,21 @@ function mcmc_sample_continuous_chain(
     conf = copy(s0)
     S = similar([conf], M) # the sample
 
-    R = if !isnothing(params.substitution_rate)
-        @info "Using provided average model substitution rate $(params.substitution_rate)"
-        params.substitution_rate
-    else
-        @info "Computing average substitution rate for the model using discrete sampling..."
-        (; value, time) = @timed average_transition_rate(
-            g, step_type, s0; rng, progress_meter
-        )
-        @info "Done in $time seconds"
-        @info "Average substitution rate: $value"
-        value
-    end
+    @argcheck !isnothing(params.substitution_rate) """
+    Continuous sampling requires `substitution_rate` (Ω) to be set in the parameters.
+    Compute it with `average_transition_rate(g, step_type, s0)` and pass it as
+    `SamplingParameters(; ..., substitution_rate=Ω)`.
+    """
+    @info "Using average model substitution rate $(params.substitution_rate)"
 
     # State structure for the sampling
     state = CTMCState(conf)
-    state.R = R
+    state.R = params.substitution_rate
 
     # Burnin
     burnin = first(time_steps)
     @info "Initializing with $(burnin) burnin iterations... "
-    burnin > 0 && mcmc_steps!(state, g, burnin, step_type; rng)
+    burnin > 0 && mcmc_steps!(state, g, burnin, step_type; rng, params.mutation_matrix)
     S[1] = copy(state.seq)
 
     # Sampling
@@ -175,7 +168,7 @@ function mcmc_sample_continuous_chain(
         # doing T steps on the current configuration
         @debug "Sampling for time $T"
         _, number_substitutions, substitutions = mcmc_steps!(
-            state, g, T, step_type; rng, params.track_substitutions
+            state, g, T, step_type; rng, params.track_substitutions, params.mutation_matrix
         )
         # storing the result in S
         S[m + 1] = copy(state.seq)
@@ -193,7 +186,7 @@ function mcmc_sample_continuous_chain(
         next!(progress; showvalues=[("steps", m + 1), ("total", M)])
     end
     @info "Sampling done in $time seconds"
-    sequences = fmt_output(S, alignment_output, translate_output; names=time_steps)
+    sequences = fmt_output(S, pack_output, translate_output; names=time_steps)
     return (;
         sequences,
         tvals=collect(time_steps),
@@ -207,24 +200,25 @@ end
 #=====================#
 
 function fmt_output(
-    sequences::AbstractVector{T}, alignment, translate; names=nothing, dict=false
+    sequences::AbstractVector{T}, pack, translate; names=nothing, dict=false
 ) where {T<:CodonSequence}
-    return if alignment
-        A = Alignment(sequences; names)
-        translate ? genetic_code(A) : A
+    return if pack
+        # `as_codons=false` stores the translation directly, and tags the sample as
+        # holding amino acids
+        SequenceSample(sequences; labels=names, as_codons=(!translate))
     elseif dict
-        Dict{String,T}(name => seq for (name, seq) in zip(names, sequences))
+        Dict{String,T}(string(name) => seq for (name, seq) in zip(names, sequences))
     else
         sequences
     end
 end
 function fmt_output(
-    sequences::AbstractVector{T}, alignment, translate; names=nothing, dict=false
+    sequences::AbstractVector{T}, pack, translate; names=nothing, dict=false
 ) where {T<:AbstractSequence}
-    return if alignment
-        Alignment(sequences; names)
+    return if pack
+        SequenceSample(sequences; labels=names)
     elseif dict
-        Dict{String,T}(name => seq for (name, seq) in zip(names, sequences))
+        Dict{String,T}(string(name) => seq for (name, seq) in zip(names, sequences))
     else
         sequences
     end

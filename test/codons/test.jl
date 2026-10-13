@@ -1,6 +1,6 @@
 @testset "GenCode: Symbol to Int to Symbol" begin
-    for i in 1:length(codon_alphabet)
-        aa_char = genetic_code(codon_alphabet[i])
+    for i in 1:PottsEvolver.Q_CODON
+        aa_char = genetic_code(codon_alphabet(i))
         aa_int = genetic_code(i)
         @test (isnothing(aa_int) && aa_char == '*') || (aa_alphabet(aa_int) == aa_char)
     end
@@ -8,7 +8,7 @@ end
 
 @testset "Genetic code" begin
     # This mainly tests self-consistency
-    for aa in 1:length(aa_alphabet)
+    for aa in 1:PottsEvolver.Q_AA
         @test aa in map(genetic_code, PottsEvolver.reverse_code(aa))
         @test genetic_code(PottsEvolver.reverse_code_rand(aa)) == aa
 
@@ -32,7 +32,7 @@ end
 
 @testset "Accessible codons" begin
     gap_codon = codon_alphabet(PottsEvolver.Codon("---"))
-    codons = filter(PottsEvolver.iscoding, 1:length(codon_alphabet)) # Ints - only coding
+    codons = filter(PottsEvolver.iscoding, 1:PottsEvolver.Q_CODON) # Ints - only coding
 
     # Test the one argument version of accessible codons
     for codon in codons

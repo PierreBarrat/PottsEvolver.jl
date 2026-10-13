@@ -17,7 +17,11 @@ end
     x::Union{Nothing,Integer} # state of the next mutation
     R::Union{Nothing,FloatType} = nothing # average transition rate - Ω in paper
     energy::Union{Nothing,FloatType}
-    function CTMCState{S}(sequence::S, q::Integer, L::Integer) where {S<:AbstractSequence}
+    # `q` (states per position) and `L` are both fixed by the sequence: `q` from its type
+    # (see `n_states`) and `L` from its length.
+    function CTMCState{S}(sequence::S) where {S<:AbstractSequence}
+        q = n_states(sequence)
+        L = length(sequence)
         return new{S}(
             sequence,
             nothing,
@@ -35,20 +39,7 @@ end
     end
 end
 
-function CTMCState(sequence::CodonSequence)
-    q = length(codon_alphabet)
-    L = length(sequence)
-    return CTMCState{CodonSequence}(sequence, q, L)
-end
-function CTMCState(sequence::AASequence)
-    q = 21
-    L = length(sequence)
-    return CTMCState{AASequence}(sequence, q, L)
-end
-function CTMCState(sequence::NumSequence{T,q}) where {T,q}
-    L = length(sequence)
-    return CTMCState{NumSequence{T,q}}(sequence, q, L)
-end
+CTMCState(sequence::S) where {S<:AbstractSequence} = CTMCState{S}(sequence)
 
 function reset!(state::CTMCState)
     # state.seq = state.seq
@@ -101,9 +92,16 @@ function mcmc_steps!(
     `Tmax` is `AbstractFloat`: expected sampling type to be :continuous.
     Instead :$(parameters.sampling_type).
     """
+    check_mutation_matrix(parameters.mutation_matrix, sequence)
     state = CTMCState(sequence)
     return mcmc_steps!(
-        state, g, Tmax, parameters.step_type; parameters.track_substitutions, kwargs...
+        state,
+        g,
+        Tmax,
+        parameters.step_type;
+        parameters.track_substitutions,
+        parameters.mutation_matrix,
+        kwargs...,
     )
 end
 function mcmc_steps!(
@@ -121,7 +119,13 @@ end
 #=================================#
 
 function gillespie!(
-    state, g, Tmax, step_type; rng=Random.default_rng(), track_substitutions=false
+    state,
+    g,
+    Tmax,
+    step_type;
+    rng=Random.default_rng(),
+    track_substitutions=false,
+    mutation_matrix=nothing,
 )
     Tmax == 0 && return Float64[]
 
@@ -133,7 +137,7 @@ function gillespie!(
         state.ΔE_copy .= state.ΔE # memorize the old ΔE in case no move is made
 
         # compute transition rates and scaled substitution rate
-        Q = transition_rates!(state, g, step_type)
+        Q = transition_rates!(state, g, step_type; mutation_matrix)
         R = sum(Q)
         if R <= 0 || isnan(R)
             @error "Something went wrong in gillespie: total rate $R"
@@ -144,7 +148,7 @@ function gillespie!(
         # @debug "Scaled substitution rate per site: $(R_scaled/L)"
         # pick time of next substitution
 
-        Δt = rand(rng, Exponential(1 / R_scaled))
+        Δt = randexp(rng) / R_scaled
         state.t += Δt # tracking total time in state
         t += Δt
 
@@ -227,10 +231,11 @@ end
 #==============================================================================#
 
 """
-    average_transition_rate(g::PottsGraph, step_type, s0::AbstractSequence)
-    average_transition_rate(g::PottsGraph, step_type, S::Vector{<:AbstractSequence})
     average_transition_rate(
-        g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence
+        g::PottsGraph, step_type, s0::AbstractSequence; params, n_samples,
+    )
+    average_transition_rate(
+        g::PottsGraph, step_type, S::Vector{<:AbstractSequence}; mutation_matrix
     )
 
 Compute the average transition rate for the continuous time Markov chain based on `g`.
@@ -240,7 +245,13 @@ In the first form, a sample from `g` is used for averaging.
 `s0` is only used to initialize the `CTMCState` and provide a type (codon or aa),
 and the keyword arguments are used to parametrize the sampling process.
 
-In the second form, the sample is provided as argument, either as a vector of sequences or as a fasta file.
+In the second form, the sample is provided as a vector of sequences.
+To average over sequences stored in a fasta file, read them yourself and pass the result:
+```julia
+using FASTX
+S = [AASequence(sequence(rec)) for rec in FASTAReader(open(fastafile))]
+average_transition_rate(g, step_type, S)
+```
 """
 function average_transition_rate(
     g::PottsGraph,
@@ -249,35 +260,51 @@ function average_transition_rate(
     rng=Random.default_rng(),
     progress_meter=true,
     params=nothing,
+    spacing=10 * size(g).L,
     n_samples=250,
-    Teq=10 * size(g).L,
 )
     if isnothing(params)
-        params = SamplingParameters(; sampling_type=:discrete, Teq)
+        params = SamplingParameters(; sampling_type=:discrete)
     end
 
     sample_eq = mcmc_sample(
-        g, n_samples, params; alignment_output=false, init=s0, rng, progress_meter
+        g, n_samples, params; spacing, pack_output=false, init=s0, rng, progress_meter
     )
     sample_eq = sample_eq.sequences
-    return average_transition_rate(g, step_type, sample_eq)
+    return average_transition_rate(
+        g, step_type, sample_eq; mutation_matrix=params.mutation_matrix
+    )
 end
 function average_transition_rate(
-    g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}
+    g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}; mutation_matrix=nothing
 )
-    return mean(transition_rates(g, step_type, S))
+    return mean(transition_rates(g, step_type, S; mutation_matrix))
 end
-function average_transition_rate(
-    g::PottsGraph, step_type, fastafile::AbstractString; seq_type=AASequence
-)
-    aln = read_fasta(fastafile)
-    sample = map(seq_type, aln)
-    return average_transition_rate(g, step_type, sample)
-end
-
 #========================================================================#
 ############################ Transition rates ############################
 #========================================================================#
+
+"""
+    check_mutation_matrix(μ, sequence)
+
+Validate that a mutation matrix `μ` is compatible with `sequence`: it must be `q x q` with
+`q = n_states(sequence)` (the gap is included as state 1). Mutation matrices are not yet
+supported for `CodonSequence`. Does nothing if `μ === nothing`.
+"""
+check_mutation_matrix(::Nothing, ::AbstractSequence) = nothing
+function check_mutation_matrix(μ::AbstractMatrix, sequence::AbstractSequence)
+    q = n_states(sequence)
+    @argcheck size(μ) == (q, q) """
+        `mutation_matrix` must be $q x $q for a $(typeof(sequence)) - got $(size(μ)).
+        The gap is included as state 1.
+        """
+    return nothing
+end
+function check_mutation_matrix(::AbstractMatrix, ::CodonSequence)
+    return throw(
+        ArgumentError("Mutation matrices are not yet supported for codon sequences.")
+    )
+end
 
 """
     transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
@@ -285,21 +312,27 @@ end
 Compute the transition rate matrix for the sequence `sequence`.
 Return the a `q` by `L` matrix `Q`. Allocates a `CTMCState`.
 """
-function transition_rates(sequence::AbstractSequence, g::PottsGraph, step_type)
+function transition_rates(
+    sequence::AbstractSequence, g::PottsGraph, step_type; mutation_matrix=nothing
+)
+    check_mutation_matrix(mutation_matrix, sequence)
     state = CTMCState(copy(sequence))
-    return transition_rates!(state, g, step_type)
+    return transition_rates!(state, g, step_type; mutation_matrix)
 end
 """
     transition_rates(g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence})
 
 Compute the summed transition rate of each sequence in `S`.
 """
-function transition_rates(g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence})
+function transition_rates(
+    g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}; mutation_matrix=nothing
+)
     @argcheck !isempty(S) "Got empty sequence vector"
+    check_mutation_matrix(mutation_matrix, S[1])
     state = CTMCState(S[1])
     return map(S) do sequence
         copy!(state.seq, sequence)
-        return sum(transition_rates!(state, g, step_type))
+        return sum(transition_rates!(state, g, step_type; mutation_matrix))
     end
 end
 
@@ -309,14 +342,17 @@ end
 Compute the transition rate matrix for the sequence `state.seq`.
 Return the a `q` by `L` matrix `Q` and the total rate `R`.
 """
-function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scratch=false)
+function transition_rates!(
+    state::CTMCState, g::PottsGraph, step_type; from_scratch=false, mutation_matrix=nothing
+)
     # Compute energy differences
     state.ΔE .= compute_energy_differences!(state, g; from_scratch)
 
     # filter out inaccessible sequences (because of genetic code)
     set_accessibility_mask!(state.accessibility_mask, state.seq)
 
-    return if step_type == :glauber
+    # each step-specific function writes the rates into `state.qL_buffer` in place
+    if step_type == :glauber
         transition_rates_glauber!(state, g)
     elseif step_type == :metropolis
         transition_rates_metropolis!(state, g)
@@ -329,6 +365,18 @@ function transition_rates!(state::CTMCState, g::PottsGraph, step_type; from_scra
     else
         throw(ArgumentError("Step type $step_type not implemented"))
     end
+
+    # Mutation matrix: multiply the rate of `(i, a) -> (i, b)` by `μ[a, b]`, where `a` is
+    # the current state at `i`. Orthogonal to the rate law above, so applied once here.
+    if !isnothing(mutation_matrix)
+        q, L = size(state)
+        cur = sequence(state.seq)
+        for i in 1:L, b in 1:q
+            state.qL_buffer[b, i] *= mutation_matrix[cur[i], b]
+        end
+    end
+
+    return state.qL_buffer
 end
 
 function transition_rates_glauber!(state::CTMCState, g::PottsGraph)
@@ -581,18 +629,8 @@ end
 Compute the energy differences between `refseq` and neighbouring sequences.
 Return a matrix of dimensions `q` by `L`.
 """
-function compute_energy_differences(refseq::AASequence, g::PottsGraph)
-    ΔE = zeros(FloatType, 21, length(refseq))
-    return compute_energy_differences!(ΔE, refseq, g)
-end
-function compute_energy_differences(refseq::NumSequence{T,q}, g::PottsGraph) where {T,q}
-    ΔE = zeros(FloatType, q, length(refseq))
-    return compute_energy_differences!(ΔE, refseq, g)
-end
-function compute_energy_differences(refseq::CodonSequence, g::PottsGraph)
-    q = length(codon_alphabet)
-    L = length(refseq)
-    ΔE = zeros(Float64, q, L)
+function compute_energy_differences(refseq::AbstractSequence, g::PottsGraph)
+    ΔE = zeros(FloatType, n_states(refseq), length(refseq))
     return compute_energy_differences!(ΔE, refseq, g)
 end
 
