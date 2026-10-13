@@ -243,13 +243,7 @@ Compute the average transition rate for the continuous time Markov chain based o
 
 In the first form, a sample from `g` is used for averaging.
 `s0` is only used to initialize the `CTMCState` and provide a type (codon or aa),
-and the keyword arguments are used to parametrize the sampling process:
-
-- `params` says how that sample is drawn, and has to be *discrete*: the continuous sampler
-  would need the very `substitution_rate` being computed here. It defaults to plain
-  `SamplingParameters(; sampling_type=:discrete)`.
-- `spacing` is the number of steps between the `n_samples` samples used for the average,
-  defaulting to `10 * L`. It is not part of `params`, see `?mcmc_sample`.
+and the keyword arguments are used to parametrize the sampling process.
 
 In the second form, the sample is provided as a vector of sequences.
 To average over sequences stored in a fasta file, read them yourself and pass the result:
