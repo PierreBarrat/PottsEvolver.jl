@@ -5,6 +5,7 @@ using ArgParse
 using Dates
 using FASTX
 using Logging
+using PrecompileTools
 using Random
 using Statistics
 using TOML
@@ -1077,4 +1078,24 @@ A parse error raises an `ArgParse.ArgParseError` (rather than exiting the proces
 can be caught and reported by the caller.
 """
 parse_cli(args) = parse_args(args, cli_settings())
+
+# Without this, every launch of `pottsevolver` compiles ArgParse's table and help code again:
+# it is most of the time between typing the command and seeing `--help`.
+@setup_workload begin
+    @compile_workload begin
+        settings = cli_settings()
+        foreach((settings, settings["sample-chain"], settings["sample-tree"])) do s
+            ArgParse.show_help(devnull, s; exit_when_done=false)
+        end
+        ArgParse.usage_string(settings)
+        parse_cli(["sample-chain", "model.txt", "-p", "params.toml", "-M", "10", "--spacing", "5"])
+        parse_cli(["sample-tree", "model.txt", "tree.nwk", "-p", "params.toml", "--internals"])
+        # the entry point itself, through its argument-error path: compiling `(@main)` means
+        # inferring `run_chain` and `run_tree` too
+        redirect_stderr(devnull) do
+            (@main)(["sample-chain"])
+        end
+    end
+end
+
 end # module CLI
