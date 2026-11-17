@@ -268,14 +268,42 @@ function average_transition_rate(
     # says what the rates are weighted by. They used to be the same object, so a caller who
     # left `params` unset silently lost their matrix: the sample was built from a fresh
     # discrete `SamplingParameters`, whose `mutation_matrix` is `nothing`.
-    params_eq = something(params, SamplingParameters(; sampling_type=:discrete))
+    if isnothing(mutation_matrix) || is_symmetric_mutation_matrix(mutation_matrix)
+        # the equilibrium is still the Potts model, so a discrete sample is correct and cheap
+        params_eq = something(params, SamplingParameters(; sampling_type=:discrete))
+        sample_eq = mcmc_sample(
+            g, n_samples, params_eq; spacing, pack_output=false, init=s0, rng, progress_meter
+        )
+        return average_transition_rate(g, step_type, sample_eq.sequences; mutation_matrix)
+    end
 
+    # An asymmetric matrix moves the equilibrium to mutation-selection balance, so the sample
+    # has to come from the continuous process itself - which needs the Ω being computed here.
+    # That is not circular: Ω only rescales time (the substitution made at each step is drawn
+    # from the unscaled rates), so any positive value samples the right distribution. It only
+    # sets how many substitutions a given time buys, and underestimating it oversamples, which
+    # is the safe direction - hence the factor 10 below.
+    @info """
+    `mutation_matrix` is asymmetric: computing Ω from a continuous sample of the \
+    mutation-selection equilibrium, which takes a second sampling pass.
+    """
+    Ω_provisional =
+        average_transition_rate(
+            g, step_type, s0; params, mutation_matrix=nothing, rng, progress_meter,
+            spacing, n_samples,
+        ) / 10
+
+    mutsel_params = SamplingParameters(;
+        sampling_type=:continuous, step_type, mutation_matrix,
+        substitution_rate=Ω_provisional,
+    )
+    # time units, not steps: with Ω_provisional ten times too small, a spacing of 1 is of the
+    # order of ten substitutions per site, and the default burn-in is five times that
     sample_eq = mcmc_sample(
-        g, n_samples, params_eq; spacing, pack_output=false, init=s0, rng, progress_meter
+        g, n_samples, mutsel_params;
+        spacing=1.0, pack_output=false, init=s0, rng, progress_meter,
     )
-    return average_transition_rate(
-        g, step_type, sample_eq.sequences; mutation_matrix
-    )
+    return average_transition_rate(g, step_type, sample_eq.sequences; mutation_matrix)
 end
 function average_transition_rate(
     g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}; mutation_matrix=nothing

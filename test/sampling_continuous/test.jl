@@ -292,3 +292,41 @@ end
     params = SamplingParameters(; sampling_type=:discrete)
     @test average_transition_rate(g, :glauber, s0; params, mutation_matrix=μ, quiet...) > 0
 end
+
+@testset "is_symmetric_mutation_matrix" begin
+    f = PottsEvolver.is_symmetric_mutation_matrix
+    @test f([0 1 1; 1 0 1; 1 1 0])
+    @test !f([0 2 1; 1 0 1; 1 1 0])
+    @test f([0 1 1; 1+1e-10 0 1; 1 1 0]) # up to a tolerance
+    @test f([5 1 1; 1 -2 1; 1 1 0]) # the diagonal is ignored, as everywhere else
+end
+
+@testset "average_transition_rate: an asymmetric matrix needs a continuous sample" begin
+    L, q = 8, 5
+    g = PottsGraph(L, q; init=:rand)
+    s0 = NumSequence(L, q)
+    sym = Float64[0 1 1 1 1; 1 0 1 1 1; 1 1 0 1 1; 1 1 1 0 1; 1 1 1 1 0]
+    asym = fill(1.0, q, q)
+    asym[2:end, 2:end] .= [3.0 1 1 1]
+
+    # the extra pass is announced, so the branch taken is observable
+    function takes_second_pass(μ)
+        buf = IOBuffer()
+        with_logger(SimpleLogger(buf)) do
+            average_transition_rate(
+                g, :glauber, s0; mutation_matrix=μ, n_samples=20, progress_meter=false
+            )
+        end
+        return occursin("asymmetric", String(take!(buf)))
+    end
+
+    # a symmetric matrix leaves the equilibrium alone: the cheap discrete sample is correct
+    @test !takes_second_pass(nothing)
+    @test !takes_second_pass(sym)
+    # an asymmetric one does not, so the sample comes from the continuous process
+    @test takes_second_pass(asym)
+
+    @test average_transition_rate(
+        g, :glauber, s0; mutation_matrix=asym, n_samples=20, progress_meter=false
+    ) > 0
+end
