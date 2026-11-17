@@ -238,6 +238,42 @@ end
         end
     end
 
+    @testset "[run] records the inputs, as absolute paths" begin
+        mktempdir() do dir
+            model, paramfile = setup(dir)
+            write(joinpath(dir, "root.fasta"), ">myseq\nACDE\n")
+            # run from inside `dir` with bare filenames: that is what makes `abspath` matter,
+            # since the recorded values are meant to be copied onto a later command line
+            code = cd(dir) do
+                CLI.main([
+                    "sample-chain", "model.dat",
+                    "-p", "params.toml",
+                    "-o", "out",
+                    "--init", "root.fasta,myseq",
+                    "--init-type", "aa",
+                    "--translate",
+                    "--seed", "7",
+                    "--verbose=-1",
+                ])
+            end
+            @test code == 0
+
+            run_table = TOML.parsefile(joinpath(dir, "out", "model.params.toml"))["run"]
+            for key in ("model", "init_fasta")
+                @test isabspath(run_table[key])
+                @test isfile(run_table[key]) # resolves from anywhere, not just from `dir`
+            end
+            # the fasta path and the sequence name are separate entries, not `path,name`
+            @test endswith(run_table["init_fasta"], "root.fasta")
+            @test run_table["init_name"] == "myseq"
+            @test !haskey(run_table, "init") # that key is for the random_* keywords
+            # inputs that cannot be inferred back are recorded too
+            @test run_table["init_type"] == "aa"
+            @test run_table["translate"] == true
+            @test run_table["seed"] == 7
+        end
+    end
+
     @testset "the quick start documented in docs/src/cli.md" begin
         # Mirrors the "Quick start" section: Documenter does not run ```sh blocks, so this
         # testset is what keeps that page honest. Update both together.
@@ -279,7 +315,8 @@ end
             # and the [run] table the Reproducibility section shows
             run_table = TOML.parsefile(joinpath(results, "model.params.toml"))["run"]
             @test issetequal(
-                keys(run_table), ["init", "model", "seed", "sequence_type", "version"]
+                keys(run_table),
+                ["init", "model", "seed", "translate", "sequence_type", "version"],
             )
             @test run_table["version"] == string(pkgversion(PottsEvolver))
         end

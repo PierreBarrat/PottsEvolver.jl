@@ -342,27 +342,47 @@ in `<prefix>.substitutions.csv` are counted from the start of the run, burn-in i
 
 ## Reproducibility
 
-Every run can be reproduced from its own output directory.
+Every run records what it would take to repeat it, in `<prefix>.params.toml`.
 
-`--seed` sets the rng seed. If you do not give one, a seed is drawn for you — and either way it
-is recorded in the `[run]` table of `<prefix>.params.toml`, together with the version of
-PottsEvolver, the model file and the `--init` value:
+The sampling parameters and the `[schedule]` table are read back by `-p`. The remaining inputs —
+the model, the initial sequence, the seed — are **not**: they are command line arguments, and
+the `[run]` table records them so that you can pass them again.
 
 ```toml
 [run]
-init = "random_aa"
-model = "model.dat"
+init = "random_aa"              # or init_fasta / init_name, see below
+model = "/data/RF00001/model.dat"
 seed = 1785483533
+translate = false
 sequence_type = "AASequence{Int64}"
 version = "0.2.0"
 ```
 
-`load_params` ignores that table, so the file is a valid parameter file: you can hand a run's
-own output straight back to `-p` and sample again with identical settings.
+`load_params` ignores `[run]` entirely — nothing in it is read back — so the file stays a valid
+parameter file. Repeating a run therefore means handing it back to `-p` and copying the `[run]`
+entries onto the command line:
 
 ```sh
-pottsevolver sample-chain model.dat -p results/model.params.toml -o rerun -M 100 --seed 1785483533
+pottsevolver sample-chain /data/RF00001/model.dat \
+    -p results/model.params.toml -o rerun \
+    --init random_aa --seed 1785483533
 ```
+
+`--seed` sets the rng seed, and if you do not give one a seed is drawn and recorded, so an
+unseeded run is repeatable too. A fasta initial sequence is recorded as two entries,
+`init_fasta` and `init_name`, rather than as the `path,name` string the flag takes. `init_type`
+and `translate` are recorded as well, since neither can be reconstructed from the output.
+
+!!! note
+    Recorded paths are **absolute**. You will usually be somewhere else when you repeat a run —
+    often in the output directory — where a relative path would either fail or, worse, quietly
+    match a different file of the same name. The cost is that the output directory is no longer
+    portable to another machine: the paths go stale, though they fail loudly when they do. The
+    log file records the working directory the run was launched from, next to the command line
+    itself.
+
+Note that `--outdir` and `--prefix` are deliberately not recorded: repeating a run into its own
+output directory would overwrite the thing you are repeating.
 
 This matters most for continuous time sampling, where `substitution_rate` has to be set.
 `--compute-omega` computes it for you when the parameter file leaves it out:

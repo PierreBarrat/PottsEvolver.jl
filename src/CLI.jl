@@ -283,6 +283,7 @@ function setup_logfile(outdir, prefix, command, args)
     io = open(path, "w")
     println(io, "# pottsevolver $(pkgversion(PottsEvolver)) - $command - $(Dates.now())")
     println(io, "# args: $(join(args, ' '))")
+    println(io, "# cwd: $(pwd())")
     flush(io)
     return path, io
 end
@@ -798,13 +799,30 @@ function compute_omega!(params, g, s0; rng=Random.default_rng(), progress_meter=
 end
 
 # Metadata recorded in the `[run]` table of `<prefix>.params.toml`, alongside the parameters.
+# Nothing reads it back: it records the inputs that the parameter file does *not* carry, so
+# that a rerun can be assembled from it by hand. Paths are absolute - a relative one would be
+# meaningless once you are in the output directory, and could silently resolve to a different
+# file that happens to sit there.
 function run_metadata(args, seed)
-    return Dict{Symbol,Any}(
+    metadata = Dict{Symbol,Any}(
         :version => string(pkgversion(PottsEvolver)),
-        :model => args["model"],
-        :init => args["init"],
+        :model => abspath(args["model"]),
         :seed => Int(seed),
+        :translate => args["translate"],
     )
+    # The fasta path and the sequence name are recorded separately rather than as the
+    # `file.fasta,seqname` string the flag takes, since the table is meant to be read.
+    init = args["init"]
+    if init in _INIT_KEYWORDS
+        metadata[:init] = init
+    else
+        file, seqname = _split_init_path(init)
+        metadata[:init_fasta] = abspath(file)
+        isnothing(seqname) || (metadata[:init_name] = seqname)
+    end
+    # only when given: it overrides inference, and nothing infers it back
+    isnothing(args["init-type"]) || (metadata[:init_type] = args["init-type"])
+    return metadata
 end
 
 # Shared by both subcommands: everything between parsing and calling `mcmc_sample`.
@@ -873,7 +891,7 @@ function run_tree(args, sink)
     )
 
     metadata = run_metadata(args, seed)
-    metadata[:tree] = args["tree"]
+    metadata[:tree] = abspath(args["tree"])
     return write_tree_output(
         args["outdir"],
         default_prefix(args["prefix"], args["model"]),
