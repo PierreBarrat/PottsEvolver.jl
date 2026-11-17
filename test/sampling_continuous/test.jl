@@ -272,3 +272,23 @@ end
         end
     end
 end
+
+@testset "average_transition_rate: the mutation matrix is used" begin
+    L, q = 8, 5
+    g = PottsGraph(L, q; init=:rand)
+    s0 = NumSequence(L, q)
+    quiet = (; n_samples=30, progress_meter=false)
+    μ = fill(1.0, q, q)
+    μ[2:end, 2:end] .= [3.0 1 1 1] # asymmetric, and far from flat
+
+    # it used to arrive smuggled inside `params`, so leaving `params` unset dropped it
+    rng = Random.seed!(Xoshiro(123), 1)
+    without = average_transition_rate(g, :glauber, s0; rng, quiet...)
+    rng = Random.seed!(Xoshiro(123), 1)
+    with = average_transition_rate(g, :glauber, s0; mutation_matrix=μ, rng, quiet...)
+    @test without != with
+
+    # a matrix carried by `params` is still honoured, as the default for the new kwarg
+    params = SamplingParameters(; sampling_type=:discrete)
+    @test average_transition_rate(g, :glauber, s0; params, mutation_matrix=μ, quiet...) > 0
+end

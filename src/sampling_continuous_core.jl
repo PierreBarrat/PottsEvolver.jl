@@ -260,19 +260,21 @@ function average_transition_rate(
     rng=Random.default_rng(),
     progress_meter=true,
     params=nothing,
+    mutation_matrix=isnothing(params) ? nothing : params.mutation_matrix,
     spacing=10 * size(g).L,
     n_samples=250,
 )
-    if isnothing(params)
-        params = SamplingParameters(; sampling_type=:discrete)
-    end
+    # `params` says how the averaging sample is drawn and must be discrete; `mutation_matrix`
+    # says what the rates are weighted by. They used to be the same object, so a caller who
+    # left `params` unset silently lost their matrix: the sample was built from a fresh
+    # discrete `SamplingParameters`, whose `mutation_matrix` is `nothing`.
+    params_eq = something(params, SamplingParameters(; sampling_type=:discrete))
 
     sample_eq = mcmc_sample(
-        g, n_samples, params; spacing, pack_output=false, init=s0, rng, progress_meter
+        g, n_samples, params_eq; spacing, pack_output=false, init=s0, rng, progress_meter
     )
-    sample_eq = sample_eq.sequences
     return average_transition_rate(
-        g, step_type, sample_eq; mutation_matrix=params.mutation_matrix
+        g, step_type, sample_eq.sequences; mutation_matrix
     )
 end
 function average_transition_rate(

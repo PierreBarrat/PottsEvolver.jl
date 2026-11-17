@@ -792,7 +792,7 @@ function compute_omega!(params, g, s0; rng=Random.default_rng(), progress_meter=
     end
     @info "Computing the average substitution rate Ω..."
     params.substitution_rate = PottsEvolver.average_transition_rate(
-        g, params.step_type, s0; rng, progress_meter, params=nothing
+        g, params.step_type, s0; rng, progress_meter, params.mutation_matrix
     )
     @info "Ω = $(params.substitution_rate)"
     return params
