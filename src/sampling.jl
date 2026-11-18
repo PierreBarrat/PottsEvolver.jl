@@ -267,6 +267,21 @@ function get_init_sequence(s0::Symbol, g::PottsGraph; rng=Random.default_rng(), 
     end
 end
 get_init_sequence(s0::AbstractSequence, g; kwargs...) = copy(s0)
+
+"""
+    random_init_keyword(s0::AbstractSequence)
+
+The `init` keyword drawing random sequences of the same type as `s0`.
+
+`get_init_sequence(s0::AbstractSequence, g)` copies `s0`. This is the other thing a caller may
+want from a sequence that is only there to fix a type: a fresh random sequence of that type,
+*e.g.* one per chain when starting many chains that should not share an initial state.
+"""
+random_init_keyword(::AASequence) = :random_aa
+random_init_keyword(::CodonSequence) = :random_codon
+random_init_keyword(::RNASequence) = :random_rna
+random_init_keyword(::NumSequence) = :random_num
+
 function get_init_sequence(
     s0::AbstractVector{<:Integer}, g; rng=Random.default_rng(), kwargs...
 )

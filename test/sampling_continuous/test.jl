@@ -145,7 +145,9 @@ end
 
     @testset "wrong size rejected at sampling time" begin
         params = SamplingParameters(;
-            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0,
+            sampling_type=:continuous,
+            step_type=:glauber,
+            substitution_rate=1.0,
             mutation_matrix=ones(q + 1, q + 1),
         )
         @test_throws ArgumentError mcmc_sample(g, 3, params; spacing=1.0, init=:random_num)
@@ -154,16 +156,22 @@ end
     @testset "codon sequences rejected" begin
         gc = PottsGraph(L, 21; init=:null)
         params = SamplingParameters(;
-            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0,
+            sampling_type=:continuous,
+            step_type=:glauber,
+            substitution_rate=1.0,
             mutation_matrix=ones(PottsEvolver.Q_CODON, PottsEvolver.Q_CODON),
         )
-        @test_throws ArgumentError mcmc_sample(gc, 3, params; spacing=1.0, init=:random_codon)
+        @test_throws ArgumentError mcmc_sample(
+            gc, 3, params; spacing=1.0, init=:random_codon
+        )
     end
 
     @testset "sampling with μ is reproducible" begin
         μ = rand(q, q)
         params = SamplingParameters(;
-            sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0,
+            sampling_type=:continuous,
+            step_type=:glauber,
+            substitution_rate=1.0,
             mutation_matrix=μ,
         )
         rng = Random.seed!(Xoshiro(123), 42)
@@ -329,4 +337,28 @@ end
     @test average_transition_rate(
         g, :glauber, s0; mutation_matrix=asym, n_samples=20, progress_meter=false
     ) > 0
+end
+
+@testset "average_transition_rate: the averaging sample" begin
+    L, q = 8, 5
+    g = PottsGraph(L, q; init=:rand)
+    s0 = NumSequence(L, q)
+    quiet = (; n_samples=20, progress_meter=false)
+
+    # independent chains, one sequence each, so `rng` has to cover the initial sequences too
+    rng = Random.seed!(Xoshiro(123), 1)
+    Ω = average_transition_rate(g, :glauber, s0; rng, quiet...)
+    rng = Random.seed!(Xoshiro(123), 1)
+    @test average_transition_rate(g, :glauber, s0; rng, quiet...) == Ω
+    @test average_transition_rate(g, :glauber, s0; rng, quiet...) != Ω # rng has moved on
+
+    # `burnin` replaced `spacing`: it is now per chain, not between samples
+    @test average_transition_rate(g, :glauber, s0; burnin=1, quiet...) > 0
+
+    # `s0` only fixes the type; each chain draws its own sequence of that type
+    f = PottsEvolver.random_init_keyword
+    @test f(NumSequence(L, q)) == :random_num
+    @test f(AASequence(L)) == :random_aa
+    @test f(CodonSequence(L)) == :random_codon
+    @test f(RNASequence(L)) == :random_rna
 end
