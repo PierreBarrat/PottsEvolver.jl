@@ -25,9 +25,8 @@
         @test p.mutation_matrix == μ
 
         # a genuine generator matrix (negative diagonal) is fine; diagonal is ignored
-        @test SamplingParameters(;
-            cont..., mutation_matrix=[-2.0 1 1; 1 -2 1; 1 1 -2]
-        ) isa Any
+        @test SamplingParameters(; cont..., mutation_matrix=[-2.0 1 1; 1 -2 1; 1 1 -2]) isa
+            Any
 
         # invalid: non-square, or negative off-diagonal
         @test_throws ArgumentError SamplingParameters(;
@@ -170,10 +169,9 @@ end
     params_continuous = SamplingParameters(;
         sampling_type=:continuous, step_type=:glauber, substitution_rate=1.0
     )
-    S_continuous =
-        mcmc_sample(
-            g, M, params_continuous; spacing=5.0, pack_output=false, init=:random_aa
-        ).sequences
+    S_continuous = mcmc_sample(
+        g, M, params_continuous; spacing=5.0, pack_output=false, init=:random_aa
+    ).sequences
     @test S_continuous isa AbstractVector{<:PottsEvolver.AASequence}
     #= NEED TO CHECK TESTS BELOW  =#
     # Test mixed case 1 - integer spacing but :continuous sampling_type
@@ -181,10 +179,9 @@ end
     params_mixed1 = SamplingParameters(;
         sampling_type=:continuous, step_type=:metropolis, substitution_rate=1.0
     )
-    S_mixed1 =
-        mcmc_sample(
-            g, M, params_mixed1; spacing=Int(5), pack_output=false, init=:random_codon
-        ).sequences
+    S_mixed1 = mcmc_sample(
+        g, M, params_mixed1; spacing=Int(5), pack_output=false, init=:random_codon
+    ).sequences
     @test S_mixed1 isa AbstractVector{<:PottsEvolver.CodonSequence}
 
     # Test mixed case 2 - float spacing (convertible to Int) and :discrete sampling_type
@@ -356,29 +353,6 @@ end
         for i in 1:8
             @test aln_1[i] == aln_2[i]
         end
-    end
-
-    @testset "parallel_chains basic functionality" begin
-        # Setup minimal test data
-        L, q, n_chains = 5, 3, 3  # Small values for fast testing
-        g = PottsGraph(L, q; init=:rand)
-        params = SamplingParameters()
-        time_steps = [0, 5, 10]  # Few time points
-        inits = [NumSequence(L, q) for _ in 1:n_chains]
-
-        # Execute the function
-        result = PottsEvolver.Parallel.parallel_chains(
-            g, time_steps, inits, params; verbose=0
-        )
-
-        # Verify output structure
-        @test result isa Vector{<:Vector{<:NumSequence}}
-        @test length(result) == n_chains  # One chain per input
-
-        # Verify each chain structure
-        @test all(length(chain) == length(time_steps) for chain in result)
-        @test all(length(chain[1].seq) == L for chain in result)
-        @test all(eltype(chain) <: NumSequence for chain in result)
     end
 end
 

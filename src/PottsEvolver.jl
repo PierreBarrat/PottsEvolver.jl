@@ -38,7 +38,7 @@ include("misc.jl")
 include("sample_output.jl")
 export SequenceSample
 #! format: off
-# public sequence_type
+# public sequence_type, regroup_samples, sequences
 #! format: on
 #! format: off
 # public translate
@@ -90,7 +90,11 @@ export write_fasta
   `AASequence(::AbstractString)` / `CodonSequence(::AbstractString)`.
 =#
 
-include("Parallel/Parallel.jl")
+include("ensemble.jl")
+#! format: off
+# public parallel_chains, equilibrium_sample
+#! format: on
+
 include("CLI.jl")
 
 end

@@ -32,6 +32,10 @@ using TreeTools
         include("sampling_tree/test.jl")
     end
 
+    @testset "Ensemble" begin
+        include("ensemble/test.jl")
+    end
+
     @testset "CLI" begin
         include("cli/test.jl")
     end
