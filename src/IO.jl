@@ -44,7 +44,7 @@ a tree.
 function write_fasta(
     file::AbstractString, sample::SequenceSample; labels=sample.labels, kwargs...
 )
-    sequences = map(m -> _sequence_from_column(sample, sample[m]), 1:length(sample))
+    sequences = PottsEvolver.sequences(sample)
     return write_fasta(file, sequences; labels, kwargs...)
 end
 

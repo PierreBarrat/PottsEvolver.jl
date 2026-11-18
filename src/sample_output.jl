@@ -132,6 +132,19 @@ function Base.show(io::IO, x::MIME"text/plain", X::SequenceSample{S,T}) where {S
     return show(io, x, X.data')
 end
 
+"""
+    sequences(X::SequenceSample)
+
+Rebuild the sequences of `X` as a `Vector` of `AbstractSequence`, of the type that `X` is
+tagged with: the inverse of `SequenceSample(sequences)`, dropping the labels.
+
+Needed by the functions that take a plain vector of sequences, *e.g.*
+`average_transition_rate`.
+"""
+function sequences(X::SequenceSample)
+    return map(m -> _sequence_from_column(X, X[m]), 1:length(X))
+end
+
 # Rebuild a sequence object from one column, used when writing to fasta.
 function _sequence_from_column(::SequenceSample{S}, col) where {S<:AASequence}
     return AASequence(collect(col))
@@ -154,4 +167,48 @@ Translate a sample of codons into the corresponding sample of amino acids.
 function translate(X::SequenceSample{S,T}) where {S<:CodonSequence,T}
     data = map(x -> convert(T, genetic_code(x)), X.data)
     return SequenceSample{AASequence{T},T}(data, copy(X.labels))
+end
+
+"""
+    regroup_samples(data::AbstractVector{<:SequenceSample})
+
+Transpose a vector of samples against their labels.
+
+Take `M` samples of size `L x N`, all covering the same `N` labels, and return `N` samples of
+size `L x M`: one per label, in the order of `first(data).labels`. In other words,
+`data[m]["label"]` becomes `out[n][m]`, where `n` is the position of `"label"` in that order.
+The labels of each output sample are the indices `1:M` into `data`.
+
+The `N` labels must be the same *set* in every element of `data`, but not necessarily in the
+same order: each sample is looked up by label, not by position.
+
+Used to regroup the output of repeated runs. For a vector of chains, labels are sampling times,
+so the output is one sample per time, with chains as columns; see
+`parallel_chains`. For a vector of tree runs, labels are node names, and
+`pernode_alignment` wraps this to key the result by node label instead.
+"""
+function regroup_samples(data::AbstractVector{S}) where {S<:SequenceSample}
+    @argcheck !isempty(data) "Cannot regroup an empty vector of samples"
+    @argcheck allequal(X -> sort(X.labels), data) """
+        All samples must cover the same set of labels
+        """
+    @argcheck allequal(X -> size(X, 1), data) """
+        All samples must hold sequences of the same length
+        """
+
+    labels = first(data).labels
+    L = size(first(data), 1)
+    M = length(data)
+    T = eltype(first(data).data)
+
+    # one label -> column lookup per sample, instead of a linear scan per (label, sample)
+    columns = map(X -> Dict(l => i for (i, l) in enumerate(X.labels)), data)
+
+    return map(labels) do label
+        D = Matrix{T}(undef, L, M)
+        for m in 1:M
+            D[:, m] .= view(data[m].data, :, columns[m][label])
+        end
+        return S(D, string.(1:M))
+    end
 end
