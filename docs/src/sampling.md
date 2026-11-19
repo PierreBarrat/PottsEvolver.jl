@@ -214,17 +214,24 @@ Then sample with `SamplingParameters(; sampling_type=:continuous, substitution_r
 ### With a mutation matrix
 
 An asymmetric `mutation_matrix` ``\mu`` moves the equilibrium away from the Potts model and
-towards mutation-selection balance. This breaks the second form above: it draws its sequences
-with a *discrete* chain, and discrete sampling ignores `mutation_matrix` entirely, so it would
-average ``\mu``-weighted rates over Potts-equilibrium sequences. Use the first form, and pass
-the matrix to both halves — `average_transition_rate` defaults to `mutation_matrix=nothing`
-and will otherwise return the wrong number without complaining.
+towards mutation-selection balance, so averaging over a sample of the *Potts* model gives the
+wrong rate. `average_transition_rate` handles this itself: pass `mutation_matrix` to it, and it
+will draw its sequences from the continuous process rather than from a discrete chain whenever
+the matrix is asymmetric, saying so as it goes. That costs an extra sampling pass.
 
-That leaves an apparent chicken-and-egg problem: sampling the right equilibrium needs the
-``\Omega`` you are trying to compute. It is milder than it looks, because ``\Omega`` only
-rescales time. The substitution made at each step is drawn from the *unscaled* rates, so the
-sequence of states visited — and hence the equilibrium being sampled — does not depend on the
-value supplied. Any positive one gives a correctly distributed sample.
+```julia
+Ω = average_transition_rate(g, :glauber, s0; mutation_matrix=μ)
+```
+
+The matrix has to be passed explicitly. It is not taken from a `params` you might also pass:
+`params` only says how the averaging sample is drawn.
+
+Doing it by hand is still worth understanding, since it is what the function does internally
+and what you need if you want control over the equilibration. It looks circular — sampling the
+right equilibrium needs the ``\Omega`` you are trying to compute — but it is not, because
+``\Omega`` only rescales time. The substitution made at each step is drawn from the *unscaled*
+rates, so the sequence of states visited — and hence the equilibrium being sampled — does not
+depend on the value supplied. Any positive one gives a correctly distributed sample.
 
 What it does change is the clock, and so how much sampling a requested time buys:
 

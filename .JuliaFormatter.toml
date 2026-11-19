@@ -1,2 +1,3 @@
 style="blue"
-ignore = ["PottsEvolver.jl"]
+# `example/` holds a Pluto notebook, whose layout is Pluto's business, not the formatter's.
+ignore = ["PottsEvolver.jl", "example/*"]

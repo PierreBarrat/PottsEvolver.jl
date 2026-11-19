@@ -23,9 +23,9 @@
         spec = (; kind=:log, start=1, stop=1000, n_samples=4)
         @test CLI.schedule_times(spec) ≈ [1, 10, 100, 1000]
         # geometric spacing is undefined from 0
-        @test_throws ArgumentError CLI.schedule_times(
-            (; kind=:log, start=0, stop=10, n_samples=3)
-        )
+        @test_throws ArgumentError CLI.schedule_times((;
+            kind=:log, start=0, stop=10, n_samples=3
+        ))
         # a single point needs no ratio, so `start = 0` is fine there
         @test CLI.schedule_times((; kind=:log, start=0, stop=10, n_samples=1)) == [0]
     end
@@ -41,8 +41,9 @@ end
     # a linear table is read leniently: the flags may complete it, so unset stays `nothing`
     @test CLI.parse_tvals(Dict("spacing" => 50, "n_samples" => 3)) ==
         (; kind=:linear, burnin=nothing, spacing=50, n_samples=3)
-    @test CLI.normalize_schedule(CLI.parse_tvals(Dict("spacing" => 50, "n_samples" => 3))) ==
-        (; kind=:linear, burnin=250, spacing=50, n_samples=3)
+    @test CLI.normalize_schedule(
+        CLI.parse_tvals(Dict("spacing" => 50, "n_samples" => 3))
+    ) == (; kind=:linear, burnin=250, spacing=50, n_samples=3)
     # and an empty one normalises to a single sample, one step after a 5-step burn-in
     @test CLI.normalize_schedule(CLI.parse_tvals(Dict{String,Any}())) ==
         (; kind=:linear, burnin=5, spacing=1, n_samples=1)
@@ -85,9 +86,8 @@ end
         spec = (; kind=:log, start=1.0, stop=1e5, n_samples=100_000)
         table, sidecar = CLI.write_tvals(spec)
         @test isnothing(sidecar)
-        @test table == Dict(
-            "kind" => "log", "start" => 1.0, "stop" => 1e5, "n_samples" => 100_000
-        )
+        @test table ==
+            Dict("kind" => "log", "start" => 1.0, "stop" => 1e5, "n_samples" => 100_000)
         # and it round-trips
         @test CLI.parse_tvals(table) == spec
 
@@ -99,9 +99,8 @@ end
         # which also avoids a float wobble when the spacing does not divide evenly
         spec = (; kind=:linear, start=0, stop=100, n_samples=4)
         table, _ = CLI.write_tvals(spec)
-        @test table == Dict(
-            "kind" => "linear", "start" => 0, "stop" => 100, "n_samples" => 4
-        )
+        @test table ==
+            Dict("kind" => "linear", "start" => 0, "stop" => 100, "n_samples" => 4)
         @test CLI.parse_tvals(table) == spec
     end
 
@@ -122,8 +121,13 @@ end
 
 @testset "resolve_schedule" begin
     # the parsed-args shape `resolve_schedule` reads
-    function cli_args(; n_samples=nothing, spacing=nothing, burnin=nothing,
-                      tvals=Float64[], tvals_file=nothing)
+    function cli_args(;
+        n_samples=nothing,
+        spacing=nothing,
+        burnin=nothing,
+        tvals=Float64[],
+        tvals_file=nothing,
+    )
         return Dict{String,Any}(
             "n-samples" => n_samples,
             "spacing" => spacing,
@@ -190,7 +194,9 @@ end
     end
 
     @testset "a log schedule comes from the file" begin
-        file = with_params("[schedule]\nkind = \"log\"\nstart = 1\nstop = 100\nn_samples = 3\n")
+        file = with_params(
+            "[schedule]\nkind = \"log\"\nstart = 1\nstop = 100\nn_samples = 3\n"
+        )
         @test CLI.resolve_schedule(cli_args(), file) ==
             (; kind=:log, start=1, stop=100, n_samples=3)
         # linear flags cannot complete a log table: it is ignored, with a warning

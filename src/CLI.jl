@@ -5,6 +5,7 @@ using ArgParse
 using Dates
 using FASTX
 using Logging
+using PrecompileTools
 using Random
 using Statistics
 using TOML
@@ -91,9 +92,10 @@ end
 
 const _INIT_KEYWORDS = ("random_aa", "random_codon", "random_rna", "random_num")
 
-# Symbol sets of the three fasta-representable alphabets. `CodonSequence`'s nucleotides are
-# written with `T` (not `U`, see `PottsEvolver.nucleotides`), so `T` is shared with the amino
-# acid alphabet (Threonine) and `U` is exclusive to `RNASequence` - the two are genuinely
+# Symbol sets of the three fasta-representable alphabets. `CodonSequence`'s nucleotides
+# are written with `T` (not `U`, see `PottsEvolver.nucleotides`), so `T` is shared with the
+# amino acid alphabet (Threonine) and `U` is exclusive to `RNASequence` - the two are
+# genuinely
 # different character sets, not "DNA vs RNA" spelling of the same thing.
 const _CODON_NT_SYMBOLS = Set(vcat(PottsEvolver.nucleotides, ['-']))
 const _RNA_SYMBOLS = Set(PottsEvolver.symbols(PottsEvolver.rna_alphabet))
@@ -271,17 +273,18 @@ end
 Create the run's log file, write a header to it, and return its path along with the **open**
 stream, which the caller owns and has to close at the end of the run.
 
-The stream is meant to be wrapped with `PottsEvolver.file_sink` and passed to `mcmc_sample` as
-`extra_sinks`, so that the CLI and the sampling functions log to the same file through a
-*single* handle. Two handles would not do: Julia's append mode seeks to the end of the file
-when opening it and each handle then keeps its own position, so their writes would land on top
-of each other.
+The stream is meant to be wrapped with `PottsEvolver.file_sink` and passed to
+`mcmc_sample` as `extra_sinks`, so that the CLI and the sampling functions log to the same
+file through a *single* handle. Two handles would not do: Julia's append mode seeks to the
+end of the file when opening it and each handle then keeps its own position, so their
+writes would land on top of each other.
 """
 function setup_logfile(outdir, prefix, command, args)
     path = output_file(outdir, prefix, "log")
     io = open(path, "w")
     println(io, "# pottsevolver $(pkgversion(PottsEvolver)) - $command - $(Dates.now())")
     println(io, "# args: $(join(args, ' '))")
+    println(io, "# cwd: $(pwd())")
     flush(io)
     return path, io
 end
@@ -299,8 +302,8 @@ function _params_toml_dict(params; run=nothing, schedule=nothing)
         Dict{String,Any}(string(k) => v for (k, v) in run)
     end
     for (field, value) in _params_pairs(params)
-        # TOML has no null; an omitted key falls back to `SamplingParameters`'s default, which
-        # is exactly what an unset field means
+        # TOML has no null; an omitted key falls back to `SamplingParameters`'s
+        # default, which is exactly what an unset field means
         isnothing(value) && continue
         if field == :sequence_type
             # not a `SamplingParameters` field: belongs to the metadata table
@@ -331,9 +334,9 @@ The file can be read back by [`load_params`](@ref): fields that are `nothing` ar
 `SamplingParameters` field goes to a `[run]` table that `load_params` ignores. `run` holds
 extra metadata to add there, *e.g.* the input files and the rng seed.
 
-`schedule` is the `[schedule]` table, as produced by [`write_tvals`](@ref): the sampling times
-are not sampling parameters, but they belong in the file so that a run can be reproduced from
-it with `-p` alone.
+`schedule` is the `[schedule]` table, as produced by [`write_tvals`](@ref): the sampling
+times are not sampling parameters, but they belong in the file so that a run can be
+reproduced from it with `-p` alone.
 """
 function write_params(path, params; run=nothing, schedule=nothing)
     open(path, "w") do io
@@ -351,16 +354,17 @@ end
 Write the substitutions tracked during a continuous chain run to `path`, as a csv file with
 columns `sample,time,position,old,new`.
 
-`sample` is the time value of the sample ending the interval the substitution happened in, and
-`time` the absolute time of the substitution, counted from the start of the run (*i.e.*
+`sample` is the time value of the sample ending the interval the substitution happened
+in, and `time` the absolute time of the substitution, counted from the start of the run
+(*i.e.*
 including `burnin`). `position`, `old` and `new` index states of the sampled sequence type,
 which is recorded in the `[run]` table of the parameter file.
 """
 function write_substitutions(path, info, tvals)
     open(path, "w") do io
         println(io, "sample,time,position,old,new")
-        # `info[m]` covers the interval ending at `tvals[m+1]`: the first sample is the initial
-        # sequence, with nothing sampled before it
+        # `info[m]` covers the interval ending at `tvals[m+1]`: the first sample is
+        # the initial sequence, with nothing sampled before it
         for (m, entry) in enumerate(info), (mutation, t) in entry.substitutions
             println(
                 io, join((tvals[m + 1], t, mutation.pos, mutation.old, mutation.new), ',')
@@ -387,8 +391,8 @@ end
 """
     write_chain_output(outdir, prefix, result; run=nothing)
 
-Write the output of a chain run (`mcmc_sample(g, M, params)`) to `outdir`, and return the paths
-written:
+Write the output of a chain run (`mcmc_sample(g, M, params)`) to `outdir`, and return
+the paths written:
 - `<prefix>.fasta`: the sample, labelled by sampling time;
 - `<prefix>.params.toml`: parameters of the run, see [`write_params`](@ref);
 - `<prefix>.substitutions.csv`: only if substitutions were tracked, see
@@ -448,9 +452,9 @@ paths written:
 - `<prefix>.params.toml`: parameters of the run, see [`write_params`](@ref);
 - `<prefix>.internals.fasta` and `<prefix>.nwk`: only if `internals`.
 
-The tree is written along with the internal sequences because `read_tree` labels the internal
-nodes that the input tree leaves unnamed: the output tree is the one whose labels the sequences
-refer to.
+The tree is written along with the internal sequences because `read_tree` labels the
+internal nodes that the input tree leaves unnamed: the output tree is the one whose labels
+the sequences refer to.
 """
 function write_tree_output(outdir, prefix, result; run=nothing, internals=false)
     files = String[]
@@ -520,10 +524,10 @@ const _SCHEDULE_KINDS = ("linear", "log")
 
 Expand a schedule spec into the vector of sampling times passed to `mcmc_sample`.
 
-- `(; kind=:linear, burnin, spacing, n_samples)`: `burnin`, then `n_samples` samples `spacing`
-  apart;
-- `(; kind=:linear, start, stop, n_samples)`: `n_samples` times from `start` to `stop`, evenly
-  spaced, *i.e.* `range`;
+- `(; kind=:linear, burnin, spacing, n_samples)`: `burnin`, then `n_samples` samples
+  `spacing` apart;
+- `(; kind=:linear, start, stop, n_samples)`: `n_samples` times from `start` to `stop`,
+  evenly spaced, *i.e.* `range`;
 - `(; kind=:log, start, stop, n_samples)`: the same between `start` and `stop`, but spaced
   geometrically, *i.e.* `logrange`. `start` must be `> 0`;
 - `(; kind=:explicit, tvals)`: the times themselves.
@@ -559,7 +563,8 @@ end
 Build a schedule spec from the `[schedule]` table of a parameter file. See
 [`schedule_times`](@ref) for the shapes, and [`write_tvals`](@ref) for the inverse.
 
-`dir` is where a `tvals_file` entry is resolved from, so that a parameter file written next to
+`dir` is where a `tvals_file` entry is resolved from, so that a parameter file written
+next to
 its sidecar keeps working when the pair is moved together.
 """
 function parse_tvals(table; dir=".")
@@ -592,8 +597,8 @@ end
 """
     normalize_schedule(spec) -> spec
 
-Fill in the entries a `linear` schedule leaves unset: `n_samples` defaults to 1, `spacing` to
-1 and `burnin` to `5 * spacing`, matching `mcmc_sample`'s own defaults.
+Fill in the entries a `linear` schedule leaves unset: `n_samples` defaults to 1,
+`spacing` to 1 and `burnin` to `5 * spacing`, matching `mcmc_sample`'s own defaults.
 """
 function normalize_schedule(spec)
     (spec.kind == :linear && hasproperty(spec, :spacing)) || return spec
@@ -609,7 +614,8 @@ end
 function _required(table, key)
     haskey(table, key) || throw(
         ArgumentError(
-            "`[schedule]` is missing the `$key` entry (kind=$(get(table, "kind", "linear")))",
+            "`[schedule]` is missing the `$key` entry " *
+            "(kind=$(get(table, "kind", "linear")))",
         ),
     )
     return table[key]
@@ -618,12 +624,14 @@ end
 """
     write_tvals(spec; prefix_path=nothing) -> (table, sidecar)
 
-Render a schedule spec as the `[schedule]` table of a parameter file, in the same shape it was
-given: a structured schedule stays four numbers, and an explicit one keeps its values.
+Render a schedule spec as the `[schedule]` table of a parameter file, in the same shape
+it was given: a structured schedule stays four numbers, and an explicit one keeps its
+values.
 
-`sidecar` is `nothing`, or a `path => times` pair to be written alongside: an explicit schedule
-that came from a file is stored as a file again rather than inlined, so that a parameter file
-stays readable no matter how many samples were asked for. It needs `prefix_path`, the output
+`sidecar` is `nothing`, or a `path => times` pair to be written alongside: an explicit
+schedule that came from a file is stored as a file again rather than inlined, so that a
+parameter file stays readable no matter how many samples were asked for. It needs
+`prefix_path`, the output
 path stem.
 """
 function write_tvals(spec; prefix_path=nothing)
@@ -659,11 +667,11 @@ end
 Resolve the sampling schedule for `sample-chain`, from the command line and the `[schedule]`
 table of the parameter file.
 
-Flags win over the file. `--tvals`/`--tvals-file` give the times directly; `-M`, `--spacing`
-and `--burnin` describe an equispaced schedule and are filled in from a `linear` table in the
-file for whatever they leave unset. Asking for times directly *and* describing them is a
-conflict, not a precedence: the file's table is then ignored with a warning, since the two
-cannot be combined meaningfully.
+Flags win over the file. `--tvals`/`--tvals-file` give the times directly; `-M`,
+`--spacing` and `--burnin` describe an equispaced schedule and are filled in from a
+`linear` table in the file for whatever they leave unset. Asking for times directly
+*and* describing them is a conflict, not a precedence: the file's table is then ignored
+with a warning, since the two cannot be combined meaningfully.
 """
 function resolve_schedule(args, params_path)
     from_file = load_schedule(params_path)
@@ -687,7 +695,8 @@ function resolve_schedule(args, params_path)
         ],
     )
     @argcheck isempty(explicit_flags) || isempty(linear_flags) """
-    $(join(vcat(explicit_flags, linear_flags), ", ")) cannot be combined: the first gives the \
+    $(join(vcat(explicit_flags, linear_flags), ", ")) cannot be combined: the first \
+    gives the \
     sampling times, the others describe them. Keep one or the other.
     """
 
@@ -704,7 +713,8 @@ function resolve_schedule(args, params_path)
     # an equispaced schedule, with the file supplying anything the flags leave out
     if !isempty(linear_flags)
         base = if !isnothing(from_file) && from_file.kind == :linear
-            # a start/stop table is restated as burnin/spacing so a flag can override one entry
+            # a start/stop table is restated as burnin/spacing so a flag can override
+            # one entry
             as_spacing_form(from_file)
         else
             _warn_ignored_table(from_file, join(linear_flags, ", "))
@@ -728,8 +738,8 @@ end
 """
     as_spacing_form(spec)
 
-Restate a `linear` schedule given as `start`/`stop` in terms of `burnin`/`spacing`, so that a
-flag can override one entry of it. The two describe the same times.
+Restate a `linear` schedule given as `start`/`stop` in terms of `burnin`/`spacing`, so
+that a flag can override one entry of it. The two describe the same times.
 """
 function as_spacing_form(spec)
     hasproperty(spec, :spacing) && return spec
@@ -742,8 +752,8 @@ _flag_or_file(flag, from_file) = isnothing(flag) ? from_file : flag
 function _warn_ignored_table(from_file, flags)
     isnothing(from_file) && return nothing
     @warn """
-    The `[schedule]` table of the parameter file is ignored: $flags was given on the command \
-    line and describes the schedule differently.
+    The `[schedule]` table of the parameter file is ignored: $flags was given on the \
+    command line and describes the schedule differently.
     """
     return nothing
 end
@@ -790,20 +800,37 @@ function compute_omega!(params, g, s0; rng=Random.default_rng(), progress_meter=
     end
     @info "Computing the average substitution rate Ω..."
     params.substitution_rate = PottsEvolver.average_transition_rate(
-        g, params.step_type, s0; rng, progress_meter, params=nothing
+        g, params.step_type, s0; rng, progress_meter, params.mutation_matrix
     )
     @info "Ω = $(params.substitution_rate)"
     return params
 end
 
-# Metadata recorded in the `[run]` table of `<prefix>.params.toml`, alongside the parameters.
+# Metadata recorded in the `[run]` table of `<prefix>.params.toml`, alongside the
+# parameters. Nothing reads it back: it records the inputs that the parameter file does
+# *not* carry, so that a rerun can be assembled from it by hand. Paths are absolute - a
+# relative one would be meaningless once you are in the output directory, and could
+# silently resolve to a different file that happens to sit there.
 function run_metadata(args, seed)
-    return Dict{Symbol,Any}(
+    metadata = Dict{Symbol,Any}(
         :version => string(pkgversion(PottsEvolver)),
-        :model => args["model"],
-        :init => args["init"],
+        :model => abspath(args["model"]),
         :seed => Int(seed),
+        :translate => args["translate"],
     )
+    # The fasta path and the sequence name are recorded separately rather than as the
+    # `file.fasta,seqname` string the flag takes, since the table is meant to be read.
+    init = args["init"]
+    if init in _INIT_KEYWORDS
+        metadata[:init] = init
+    else
+        file, seqname = _split_init_path(init)
+        metadata[:init_fasta] = abspath(file)
+        isnothing(seqname) || (metadata[:init_name] = seqname)
+    end
+    # only when given: it overrides inference, and nothing infers it back
+    isnothing(args["init-type"]) || (metadata[:init_type] = args["init-type"])
+    return metadata
 end
 
 # Shared by both subcommands: everything between parsing and calling `mcmc_sample`.
@@ -872,7 +899,7 @@ function run_tree(args, sink)
     )
 
     metadata = run_metadata(args, seed)
-    metadata[:tree] = args["tree"]
+    metadata[:tree] = abspath(args["tree"])
     return write_tree_output(
         args["outdir"],
         default_prefix(args["prefix"], args["model"]),
@@ -882,20 +909,21 @@ function run_tree(args, sink)
     )
 end
 
-# Errors a user can cause: reported as a message, without a stacktrace. Anything else is a bug
-# and is rethrown.
+# Errors a user can cause: reported as a message, without a stacktrace. Anything else
+# is a bug and is rethrown.
 const _USER_ERRORS = Union{ArgumentError,SystemError,ArgParse.ArgParseError,KeyError}
 
-# `showerror` on an `ArgParseError` prints its constructor, not its message, which is no use to
-# someone who simply mistyped a flag.
+# `showerror` on an `ArgParseError` prints its constructor, not its message, which is
+# no use to someone who simply mistyped a flag.
 _error_message(err) = sprint(showerror, err)
 _error_message(err::ArgParse.ArgParseError) = err.text
 
 """
     (@main)(ARGS)
 
-Entry point of the `pottsevolver` app. Return value is the process exit code: `0` on success,
-`1` for an error caused by the input (bad file, invalid parameters, conflicting flags).
+Entry point of the `pottsevolver` app. Return value is the process exit code: `0` on
+success, `1` for an error caused by the input (bad file, invalid parameters, conflicting
+flags).
 """
 function (@main)(ARGS)
     parsed = try
@@ -938,7 +966,8 @@ function (@main)(ARGS)
                     )
                     rethrow()
                 end
-                # `@error` reaches both the console and the log file, so one message is enough
+                # `@error` reaches both the console and the log file, so one message
+                # is enough
                 @error "pottsevolver failed: $(_error_message(err))"
                 return 1
             end
@@ -977,8 +1006,9 @@ function _add_shared_args!(settings::ArgParseSettings)
                 path, skipping inference"
         default = nothing
         "--burnin"
-        help = "For sample-chain, time before the first sample (defaults to 5 * --spacing). \
-                For sample-tree, time spent equilibrating the root sequence before sampling"
+        help = "For sample-chain, time before the first sample (defaults to \
+                5 * --spacing). For sample-tree, time spent equilibrating the root \
+                sequence before sampling"
         arg_type = Float64
         default = nothing
         "--seed"
@@ -1033,7 +1063,8 @@ function cli_settings()
         help = "Number of samples taken along the chain. Combines with --spacing/--burnin \
                 and with the `[schedule]` table of --params; defaults to 1"
         arg_type = Int
-        default = nothing # `nothing` means 1: it tells an explicit `-M 1` from no `-M` at all
+        # `nothing` means 1: it tells an explicit `-M 1` from no `-M` at all
+        default = nothing
         "--tvals"
         help = "Explicit sampling schedule (space-separated numbers), instead of \
                 -M/--spacing/--burnin. The first value is the burn-in time; later values \
@@ -1057,7 +1088,8 @@ function cli_settings()
         help = "Path to a Newick tree file"
         required = true
         "--internals"
-        help = "Also write internal-node sequences and the (possibly relabeled) sampled tree"
+        help = "Also write internal-node sequences and the (possibly relabeled) \
+                sampled tree"
         action = :store_true
     end
 
@@ -1077,4 +1109,28 @@ A parse error raises an `ArgParse.ArgParseError` (rather than exiting the proces
 can be caught and reported by the caller.
 """
 parse_cli(args) = parse_args(args, cli_settings())
+
+# Without this, every launch of `pottsevolver` compiles ArgParse's table and help code
+# again: it is most of the time between typing the command and seeing `--help`.
+@setup_workload begin
+    @compile_workload begin
+        settings = cli_settings()
+        foreach((settings, settings["sample-chain"], settings["sample-tree"])) do s
+            ArgParse.show_help(devnull, s; exit_when_done=false)
+        end
+        ArgParse.usage_string(settings)
+        parse_cli([
+            "sample-chain", "model.txt", "-p", "params.toml", "-M", "10", "--spacing", "5"
+        ])
+        parse_cli([
+            "sample-tree", "model.txt", "tree.nwk", "-p", "params.toml", "--internals"
+        ])
+        # the entry point itself, through its argument-error path: compiling `(@main)` means
+        # inferring `run_chain` and `run_tree` too
+        redirect_stderr(devnull) do
+            (@main)(["sample-chain"])
+        end
+    end
+end
+
 end # module CLI

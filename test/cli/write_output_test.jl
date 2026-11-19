@@ -90,7 +90,13 @@ end
     @testset "discrete" begin
         params = SamplingParameters()
         result = mcmc_sample(
-            g, 4, params; spacing=2, burnin=1, init=:random_aa, verbose=-1,
+            g,
+            4,
+            params;
+            spacing=2,
+            burnin=1,
+            init=:random_aa,
+            verbose=-1,
             progress_meter=false,
         )
         mktempdir() do dir
@@ -114,7 +120,13 @@ end
             track_substitutions=true,
         )
         result = mcmc_sample(
-            g, 3, params; spacing=0.5, burnin=0.1, init=:random_aa, verbose=-1,
+            g,
+            3,
+            params;
+            spacing=0.5,
+            burnin=0.1,
+            init=:random_aa,
+            verbose=-1,
             progress_meter=false,
         )
         mktempdir() do dir

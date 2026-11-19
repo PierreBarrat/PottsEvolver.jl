@@ -52,7 +52,9 @@
 
     @testset "no such file" begin
         g = PottsGraph(6, 21; init=:rand)
-        @test_throws ArgumentError PottsEvolver.CLI.load_init("does_not_exist.fasta", "aa", g)
+        @test_throws ArgumentError PottsEvolver.CLI.load_init(
+            "does_not_exist.fasta", "aa", g
+        )
     end
 
     @testset "explicit init-type overrides inference" begin

@@ -232,21 +232,28 @@ end
 
 """
     average_transition_rate(
-        g::PottsGraph, step_type, s0::AbstractSequence; params, n_samples,
+        g::PottsGraph, step_type, s0::AbstractSequence; params, n_samples, burnin,
     )
     average_transition_rate(
-        g::PottsGraph, step_type, S::Vector{<:AbstractSequence}; mutation_matrix
+        g::PottsGraph, step_type, S::Union{Vector{<:AbstractSequence},SequenceSample};
+        mutation_matrix,
     )
 
 Compute the average transition rate for the continuous time Markov chain based on `g`.
-    A sample from `g` is generated using a discrete time Markov chain for this purpose.
 
-In the first form, a sample from `g` is used for averaging.
-`s0` is only used to initialize the `CTMCState` and provide a type (codon or aa),
-and the keyword arguments are used to parametrize the sampling process.
+In the first form, a sample from `g` is drawn for the averaging: `n_samples`
+independent chains, each burnt in for `burnin` and contributing one sequence. One sequence
+per chain gives independence between the samples outright, and the chains start from
+different random sequences, so one trapped trajectory cannot stand in for the equilibrium.
 
-In the second form, the sample is provided as a vector of sequences.
-To average over sequences stored in a fasta file, read them yourself and pass the result:
+`s0` is only used to provide a type (codon, aa, rna or numerical): each chain starts from
+its own random sequence of that type, not from `s0` itself. `burnin` defaults to `10 * L`
+mcmc steps, or, in the asymmetric-`mutation_matrix` case below, to `5.0` units of
+continuous time. Pass `rng` to make the whole thing reproducible.
+
+In the second form, the sample is provided, either as a vector of sequences or as a
+[`SequenceSample`](@ref). To average over sequences stored in a fasta file, read them
+yourself and pass the result:
 ```julia
 using FASTX
 S = [AASequence(sequence(rec)) for rec in FASTAReader(open(fastafile))]
@@ -260,25 +267,83 @@ function average_transition_rate(
     rng=Random.default_rng(),
     progress_meter=true,
     params=nothing,
-    spacing=10 * size(g).L,
+    mutation_matrix=isnothing(params) ? nothing : params.mutation_matrix,
+    burnin=nothing,
     n_samples=250,
 )
-    if isnothing(params)
-        params = SamplingParameters(; sampling_type=:discrete)
+    # `params` says how the averaging sample is drawn and must be discrete;
+    # `mutation_matrix` says what the rates are weighted by. They used to be the same
+    # object, so a caller who left `params` unset silently lost their matrix: the sample
+    # was built from a fresh discrete `SamplingParameters`, whose `mutation_matrix` is
+    # `nothing`.
+    if isnothing(mutation_matrix) || is_symmetric_mutation_matrix(mutation_matrix)
+        # the equilibrium is still the Potts model, so a discrete sample is correct
+        params_eq = something(params, SamplingParameters(; sampling_type=:discrete))
+        sample_eq = equilibrium_sample(
+            g,
+            n_samples,
+            params_eq;
+            burnin=something(burnin, 10 * size(g).L),
+            init=random_init_keyword(s0),
+            seed=rand(rng, UInt32),
+            progress_meter,
+        )
+        return average_transition_rate(g, step_type, sample_eq; mutation_matrix)
     end
 
-    sample_eq = mcmc_sample(
-        g, n_samples, params; spacing, pack_output=false, init=s0, rng, progress_meter
+    # An asymmetric matrix moves the equilibrium to mutation-selection balance, so the
+    # sample has to come from the continuous process itself - which needs the Ω being
+    # computed here. That is not circular: Ω only rescales time (the substitution made at
+    # each step is drawn from the unscaled rates), so any positive value samples the right
+    # distribution. It only sets how many substitutions a given time buys, and
+    # underestimating it oversamples, which is the safe direction - hence the factor 10
+    # below.
+    @info """
+    `mutation_matrix` is asymmetric: computing Ω from a continuous sample of the \
+    mutation-selection equilibrium, which takes a second sampling pass.
+    """
+    Ω_provisional =
+        average_transition_rate(
+            g,
+            step_type,
+            s0;
+            params,
+            mutation_matrix=nothing,
+            rng,
+            progress_meter,
+            burnin,
+            n_samples,
+        ) / 10
+
+    mutsel_params = SamplingParameters(;
+        sampling_type=:continuous,
+        step_type,
+        mutation_matrix,
+        substitution_rate=Ω_provisional,
     )
-    sample_eq = sample_eq.sequences
-    return average_transition_rate(
-        g, step_type, sample_eq; mutation_matrix=params.mutation_matrix
+    # time units, not steps: with Ω_provisional ten times too small, one unit of time is of
+    # the order of ten substitutions per site, so the default burn-in below is ~50 of them
+    sample_eq = equilibrium_sample(
+        g,
+        n_samples,
+        mutsel_params;
+        burnin=something(burnin, 5.0),
+        init=random_init_keyword(s0),
+        seed=rand(rng, UInt32),
+        progress_meter,
     )
+    return average_transition_rate(g, step_type, sample_eq; mutation_matrix)
 end
 function average_transition_rate(
     g::PottsGraph, step_type, S::AbstractVector{<:AbstractSequence}; mutation_matrix=nothing
 )
     return mean(transition_rates(g, step_type, S; mutation_matrix))
+end
+function average_transition_rate(
+    g::PottsGraph, step_type, X::SequenceSample; mutation_matrix=nothing
+)
+    # the sampling functions hand back a `SequenceSample`: average over it directly
+    return average_transition_rate(g, step_type, sequences(X); mutation_matrix)
 end
 #========================================================================#
 ############################ Transition rates ############################
