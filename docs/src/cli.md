@@ -22,10 +22,7 @@ Pkg.Apps.add("PottsEvolver")
 
 !!! warning
     The CLI requires PottsEvolver v0.2.0 or later. Earlier versions ship no app, and installing
-    them gives you no executable. Until v0.2.0 is released, install from the repository:
-    ```julia
-    Pkg.Apps.add(; url="https://github.com/PierreBarrat/PottsEvolver.jl", rev="v0.2")
-    ```
+    them gives you no executable.
 
 The executable is written to `~/.julia/bin`, which has to be on your `PATH`.
 `Pkg` warns you at install time if it is not. To add it, put this in your `~/.bashrc`,
