@@ -59,9 +59,7 @@ end
         tree = PottsEvolver.prepare_tree(balanced_binary_tree(8, 1.0), rootseq)
         branchlength_meaning = BranchLengthMeaning(:step, :exact)
         params = SamplingParameters(;
-            sampling_type=:discrete,
-            step_meaning=:changed,
-            branchlength_meaning,
+            sampling_type=:discrete, step_meaning=:changed, branchlength_meaning
         )
         tree = PottsEvolver.mcmc_sample_tree!(g, tree, params)
         for node in nodes(tree; skiproot=true)
@@ -98,7 +96,9 @@ end
 
         # providing init kwarg and burnin
         rootseq = PottsEvolver.NumSequence(L, q)
-        sampled_tree = PottsEvolver.mcmc_sample_tree(g, tree, params; init=rootseq, burnin=100)
+        sampled_tree = PottsEvolver.mcmc_sample_tree(
+            g, tree, params; init=rootseq, burnin=100
+        )
         @test tree !== sampled_tree # should be a copy
         @test data(root(sampled_tree)).seq != rootseq # finite burnin: with probability ≈1 they should be different
 

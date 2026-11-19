@@ -23,16 +23,17 @@ and `burnin` kwargs, or a vector of sampling times. Remaining `kwargs` go to `mc
 too, except that `pack_output` is fixed and `progress_meter` defaults to `false`: with
 several chains running at once the bars are of little use.
 
-Chain `i` is run with `Xoshiro(seed + i)`, so a run is reproducible from `seed` alone and
-gives the same result whether or not threads are available. A seed is drawn if none is given.
+Chain `i` is run with `Xoshiro(seed + i)`, so a run is reproducible from `seed` alone
+and gives the same result whether or not threads are available. A seed is drawn if none
+is given.
 
 The second form draws `n_chains` initial sequences from `init`, see
-`PottsEvolver.get_init_sequence`; they follow from `seed` as well, so
-it reproduces the whole run. Pass `inits` instead to control them yourself.
+`PottsEvolver.get_init_sequence`; they follow from `seed` as well, so it reproduces the
+whole run. Pass `inits` instead to control them yourself.
 
 To regroup the output by time rather than by chain, pass it to
-`PottsEvolver.regroup_samples`. The special case of one sample per
-chain is `equilibrium_sample`.
+`PottsEvolver.regroup_samples`. The special case of one sample per chain is
+`equilibrium_sample`.
 """
 function parallel_chains(
     g::PottsGraph,
@@ -104,18 +105,18 @@ end
 
 Draw `n_chains` sequences from `g`, one per independent chain.
 
-Each chain starts from its own sequence drawn from `init` and is sampled once, after `burnin`
-steps. Return a single `SequenceSample` of `n_chains` sequences, labelled by chain
-index.
+Each chain starts from its own sequence drawn from `init` and is sampled once, after
+`burnin` steps. Return a single `SequenceSample` of `n_chains` sequences, labelled by
+chain index.
 
-Taking one sequence per chain buys independence between samples outright, rather than relying
-on a `spacing` large enough to decorrelate a single chain — and starting from several random
-sequences avoids reading one trapped chain as the equilibrium. That makes it the way to get
-the sample that `average_transition_rate` needs.
+Taking one sequence per chain buys independence between samples outright, rather than
+relying on a `spacing` large enough to decorrelate a single chain — and starting from
+several random sequences avoids reading one trapped chain as the equilibrium. That makes
+it the way to get the sample that `average_transition_rate` needs.
 
-`burnin` has no default: how long a chain needs to equilibrate is a property of the model, and
-the whole point of the sample is that it is drawn at equilibrium. Other `kwargs` are passed to
-`parallel_chains`.
+`burnin` has no default: how long a chain needs to equilibrate is a property of the
+model, and the whole point of the sample is that it is drawn at equilibrium. Other
+`kwargs` are passed to `parallel_chains`.
 """
 function equilibrium_sample(
     g::PottsGraph,

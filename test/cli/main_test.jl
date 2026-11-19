@@ -242,17 +242,24 @@ end
         mktempdir() do dir
             model, paramfile = setup(dir)
             write(joinpath(dir, "root.fasta"), ">myseq\nACDE\n")
-            # run from inside `dir` with bare filenames: that is what makes `abspath` matter,
-            # since the recorded values are meant to be copied onto a later command line
+            # run from inside `dir` with bare filenames: that is what makes `abspath`
+            # matter, since the recorded values are meant to be copied onto a later
+            # command line
             code = cd(dir) do
                 CLI.main([
-                    "sample-chain", "model.dat",
-                    "-p", "params.toml",
-                    "-o", "out",
-                    "--init", "root.fasta,myseq",
-                    "--init-type", "aa",
+                    "sample-chain",
+                    "model.dat",
+                    "-p",
+                    "params.toml",
+                    "-o",
+                    "out",
+                    "--init",
+                    "root.fasta,myseq",
+                    "--init-type",
+                    "aa",
                     "--translate",
-                    "--seed", "7",
+                    "--seed",
+                    "7",
                     "--verbose=-1",
                 ])
             end

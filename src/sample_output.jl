@@ -9,9 +9,9 @@ labels::Vector{String}  # one per sequence, in the same order as the columns
 ```
 
 The type parameter `S` records what the integers mean — `AASequence`, `RNASequence`,
-`CodonSequence` or `NumSequence` — which is what lets [`write_fasta`](@ref) and `PottsEvolver.translate`
-know how to interpret them. A codon sample that has been translated is tagged `AASequence`,
-since its integers are then amino acids.
+`CodonSequence` or `NumSequence` — which is what lets [`write_fasta`](@ref) and
+`PottsEvolver.translate` know how to interpret them. A codon sample that has been
+translated is tagged `AASequence`, since its integers are then amino acids.
 
 ## Methods
 
@@ -174,16 +174,16 @@ end
 
 Transpose a vector of samples against their labels.
 
-Take `M` samples of size `L x N`, all covering the same `N` labels, and return `N` samples of
-size `L x M`: one per label, in the order of `first(data).labels`. In other words,
-`data[m]["label"]` becomes `out[n][m]`, where `n` is the position of `"label"` in that order.
-The labels of each output sample are the indices `1:M` into `data`.
+Take `M` samples of size `L x N`, all covering the same `N` labels, and return `N`
+samples of size `L x M`: one per label, in the order of `first(data).labels`. In other
+words, `data[m]["label"]` becomes `out[n][m]`, where `n` is the position of `"label"` in
+that order. The labels of each output sample are the indices `1:M` into `data`.
 
-The `N` labels must be the same *set* in every element of `data`, but not necessarily in the
-same order: each sample is looked up by label, not by position.
+The `N` labels must be the same *set* in every element of `data`, but not necessarily in
+the same order: each sample is looked up by label, not by position.
 
-Used to regroup the output of repeated runs. For a vector of chains, labels are sampling times,
-so the output is one sample per time, with chains as columns; see
+Used to regroup the output of repeated runs. For a vector of chains, labels are sampling
+times, so the output is one sample per time, with chains as columns; see
 `parallel_chains`. For a vector of tree runs, labels are node names, and
 `pernode_alignment` wraps this to key the result by node label instead.
 """

@@ -79,7 +79,8 @@ Alias for `read_graph`.
 read_potts_graph = read_graph
 
 function read_graph_symbolic(file, T=FloatType)
-    ## Go through file twice: first to get L and the alphabet, the second to store parameters
+    ## Go through file twice: first to get L and the alphabet, the second to store
+    ## parameters
     # The alphabet (and hence q) is inferred from the state letters: the file lists every
     # symbol at each position, so the `h` lines cover exactly the alphabet.
     L = 0

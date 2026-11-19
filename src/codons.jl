@@ -87,7 +87,8 @@ bases(codon::Codon) = Iterators.map(i -> getfield(codon, i), 1:3)
 
 const CODON_SYMBOLS = let
     nt = nucleotides
-    C = vec(map(x -> Codon(x...), Iterators.product(nt, nt, nt))) # AAA CAA GAAA etc... (first changes fastest)
+    # AAA CAA GAAA etc... (first changes fastest)
+    C = vec(map(x -> Codon(x...), Iterators.product(nt, nt, nt)))
     pushfirst!(C, Codon('-', '-', '-')) # the gap codon therefore has index 1
     C
 end

@@ -1,20 +1,20 @@
 @testset "parse_cli" begin
     @testset "required --params enforced" begin
-        @test_throws ArgParse.ArgParseError PottsEvolver.CLI.parse_cli(
-            ["sample-chain", "model.dat"]
-        )
-        @test_throws ArgParse.ArgParseError PottsEvolver.CLI.parse_cli(
-            ["sample-tree", "model.dat", "tree.nwk"]
-        )
+        @test_throws ArgParse.ArgParseError PottsEvolver.CLI.parse_cli([
+            "sample-chain", "model.dat"
+        ])
+        @test_throws ArgParse.ArgParseError PottsEvolver.CLI.parse_cli([
+            "sample-tree", "model.dat", "tree.nwk"
+        ])
     end
 
     @testset "required positionals enforced" begin
-        @test_throws ArgParse.ArgParseError PottsEvolver.CLI.parse_cli(
-            ["sample-chain", "-p", "params.toml"]
-        )
-        @test_throws ArgParse.ArgParseError PottsEvolver.CLI.parse_cli(
-            ["sample-tree", "model.dat", "-p", "params.toml"]
-        )
+        @test_throws ArgParse.ArgParseError PottsEvolver.CLI.parse_cli([
+            "sample-chain", "-p", "params.toml"
+        ])
+        @test_throws ArgParse.ArgParseError PottsEvolver.CLI.parse_cli([
+            "sample-tree", "model.dat", "-p", "params.toml"
+        ])
     end
 
     @testset "sample-chain: defaults" begin
@@ -39,9 +39,9 @@
     end
 
     @testset "sample-tree: defaults" begin
-        r = PottsEvolver.CLI.parse_cli(
-            ["sample-tree", "model.dat", "tree.nwk", "-p", "params.toml"]
-        )
+        r = PottsEvolver.CLI.parse_cli([
+            "sample-tree", "model.dat", "tree.nwk", "-p", "params.toml"
+        ])
         @test r["%COMMAND%"] == "sample-tree"
         sub = r["sample-tree"]
         @test sub["model"] == "model.dat"

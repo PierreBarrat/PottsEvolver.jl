@@ -52,7 +52,8 @@ end
         PottsEvolver.parallel_chains(g, tvals, inits[1:1], params; seed=1, verbose=-1)
     ) == first(chains)
 
-    # tvals=[0, ...]: the first sample is the initial sequence, so chains differ by their init
+    # tvals=[0, ...]: the first sample is the initial sequence, so chains differ by
+    # their init
     @test all(i -> chains[i][1] == PottsEvolver.sequence(inits[i]), 1:n_chains)
 
     @testset "M/spacing/burnin schedule" begin

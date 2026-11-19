@@ -55,10 +55,13 @@ end
     write(fnum, g; format=:numerical)
     @test PottsEvolver.infer_format_from_line(first(eachline(fsym))) == :symbolic
     @test PottsEvolver.infer_format_from_line(first(eachline(fnum))) == :numerical
-    rm(fsym); rm(fnum)
+    rm(fsym)
+    rm(fnum)
 
     # A graph whose q matches no symbolic alphabet cannot be written symbolically
-    @test_throws ArgumentError write(tempname(), PottsGraph(3, 7; init=:rand); format=:symbolic)
+    @test_throws ArgumentError write(
+        tempname(), PottsGraph(3, 7; init=:rand); format=:symbolic
+    )
 end
 
 @testset "Gauge change" begin

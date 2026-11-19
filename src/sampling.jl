@@ -14,8 +14,8 @@
     )
     mcmc_sample(g, tvals::AbstractVector, s0, params::SamplingParameters; kwargs...)
 
-First form: take `M` samples of `g` starting from sequence `s0`, using parameters in `params`.
-Samples are `spacing` apart, and the first one is taken after `burnin`.
+First form: take `M` samples of `g` starting from sequence `s0`, using parameters in
+`params`. Samples are `spacing` apart, and the first one is taken after `burnin`.
 Return value: named tuple with fields
 - `sequences`: a [`SequenceSample`](@ref), or a vector of sequences if `pack_output=false`
 - `tvals`: vector with the time (number of steps, if discrete) at each sample
@@ -30,11 +30,11 @@ value of `tvals` acts as the burn-in, and the following ones are absolute times,
 any `AbstractVector` will do, so `range`, `logrange` or a hand-written vector all work. Can
 also be used with the `init` kwarg.
 
-The schedule is *not* part of `params`: `SamplingParameters` describes *how* a step is taken,
-while `spacing`/`burnin`/`tvals` say *when* samples are taken. You are expected to give one:
-`spacing` defaults to 1, a single mcmc step between samples, which is seldom enough for
-successive samples to be independent. For `:discrete` sampling, times are numbers of mcmc steps
-and must be whole numbers.
+The schedule is *not* part of `params`: `SamplingParameters` describes *how* a step is
+taken, while `spacing`/`burnin`/`tvals` say *when* samples are taken. You are expected to
+give one: `spacing` defaults to 1, a single mcmc step between samples, which is seldom
+enough for successive samples to be independent. For `:discrete` sampling, times are
+numbers of mcmc steps and must be whole numbers.
 
 
 If `pack_output`, the sequences are wrapped into a [`SequenceSample`](@ref), otherwise
@@ -65,8 +65,8 @@ function mcmc_sample(
     @argcheck spacing >= 0 && burnin >= 0
     if params.sampling_type == :discrete
         @argcheck isinteger(spacing) && isinteger(burnin) """
-        For :discrete mcmc, `spacing` and `burnin` are numbers of steps and must be integers.
-        Instead $spacing and $burnin.
+        For :discrete mcmc, `spacing` and `burnin` are numbers of steps and must be
+        integers. Instead $spacing and $burnin.
         """
         spacing, burnin = Int(spacing), Int(burnin)
     end
@@ -154,9 +154,9 @@ will contain the amino acid sequence and not the codons.
 `PottsEvolver.translate` can be applied to it afterwards.
 
 Sampling times come from the branch lengths of the tree, so there is no schedule to give.
-The `burnin` kwarg sets the root sequence: `burnin` mcmc steps are performed starting from the
-input sequence, and the result is placed at the root. It defaults to 0, which places the input
-sequence at the root exactly as given.
+The `burnin` kwarg sets the root sequence: `burnin` mcmc steps are performed starting
+from the input sequence, and the result is placed at the root. It defaults to 0, which
+places the input sequence at the root exactly as given.
 """
 function mcmc_sample(
     g,
@@ -230,13 +230,16 @@ end
 
 Try to guess a reasonable init sequence from `s0`:
 - if `s0::AbstractSequence`, use a **copy** of it;
-- if `s0::Symbol`, then it should be among `[:random_codon, :random_aa, :random_rna, :random_num]`;
-  a random sequence of the corresponding type is created, using the length of `g`;
-- if `s0` is a vector of integers, convert it to `AASequence`, `CodonSequence` or `NumSequence`;
+- if `s0::Symbol`, then it should be among
+  `[:random_codon, :random_aa, :random_rna, :random_num]`; a random sequence of the
+  corresponding type is created, using the length of `g`;
+- if `s0` is a vector of integers, convert it to `AASequence`, `CodonSequence` or
+  `NumSequence`;
   the conversion type depends on the number of states `q` of `g` and on the maximum element
   of `s0`. Graphs with `q == 21` are assumed to represent amino acids.
 
-The graph `g` is only used to determine the length of the sequence, and the alphabet size in the case of a numerical sequence.
+The graph `g` is only used to determine the length of the sequence, and the alphabet
+size in the case of a numerical sequence.
 """
 function get_init_sequence(s0::Symbol, g::PottsGraph; rng=Random.default_rng(), kwargs...)
     (; L, q) = size(g)
@@ -262,7 +265,8 @@ function get_init_sequence(s0::Symbol, g::PottsGraph; rng=Random.default_rng(), 
         NumSequence(rng, L, q)
     else
         error(
-            "Invalid symbol `init = $s0`. Options: `[:random_codon, :random_aa, :random_rna, :random_num]`",
+            "Invalid symbol `init = $s0`. Options: " *
+            "`[:random_codon, :random_aa, :random_rna, :random_num]`",
         )
     end
 end
@@ -273,9 +277,10 @@ get_init_sequence(s0::AbstractSequence, g; kwargs...) = copy(s0)
 
 The `init` keyword drawing random sequences of the same type as `s0`.
 
-`get_init_sequence(s0::AbstractSequence, g)` copies `s0`. This is the other thing a caller may
-want from a sequence that is only there to fix a type: a fresh random sequence of that type,
-*e.g.* one per chain when starting many chains that should not share an initial state.
+`get_init_sequence(s0::AbstractSequence, g)` copies `s0`. This is the other thing a
+caller may want from a sequence that is only there to fix a type: a fresh random sequence
+of that type, *e.g.* one per chain when starting many chains that should not share an
+initial state.
 """
 random_init_keyword(::AASequence) = :random_aa
 random_init_keyword(::CodonSequence) = :random_codon
@@ -324,19 +329,21 @@ end
 
 A logger writing to the already open stream `io` at verbosity `verbose`.
 
-Pass it in `extra_sinks` to log to a file that the *caller* owns and closes, instead of having
-[`get_logger`](@ref) open one itself through its `logfile` argument. This is the only safe way
-for several loggers to write to the same file: Julia's append mode seeks to the end of the file
-when *opening* it, and each handle then keeps its own position, so two handles onto one file
-overwrite each other's output. Sharing a single stream leaves a single position.
+Pass it in `extra_sinks` to log to a file that the *caller* owns and closes, instead of
+having [`get_logger`](@ref) open one itself through its `logfile` argument. This is the
+only safe way for several loggers to write to the same file: Julia's append mode seeks to
+the end of the file when *opening* it, and each handle then keeps its own position, so two
+handles onto one file overwrite each other's output. Sharing a single stream leaves a
+single position.
 """
 file_sink(io::IO, verbose) = MinLevelLogger(FileLogger(io), log_level(verbose))
 
 """
     get_logger(verbose, logfile, logfile_verbose; extra_sinks=())
 
-Build a `TeeLogger` writing to the console at verbosity `verbose`, and to `logfile` (if given,
-as a path) at verbosity `logfile_verbose`. Loggers in `extra_sinks` are added to it, see
+Build a `TeeLogger` writing to the console at verbosity `verbose`, and to `logfile` (if
+given, as a path) at verbosity `logfile_verbose`. Loggers in `extra_sinks` are added to it,
+see
 [`file_sink`](@ref).
 """
 function get_logger(verbose, logfile, logfile_verbose; extra_sinks=())
@@ -380,15 +387,17 @@ end
 
 Warn if a sampling schedule asks for several samples at the same time.
 
-No mcmc step happens between two samples taken at the same time, so they come out as identical
-sequences. The usual cause is a `spacing` of 0, which is still the default: it is a valid
+No mcmc step happens between two samples taken at the same time, so they come out as
+identical sequences. The usual cause is a `spacing` of 0, which is still the default: it is
+a valid
 request (*e.g.* `M` copies of the initial sequence) but rarely what is wanted.
 """
 function warn_repeated_times(tvals)
     repeats = length(tvals) - length(unique(tvals))
     repeats > 0 && @warn """
-    The sampling schedule asks for the same time more than once ($repeats repeated value(s)).
-    No mcmc step happens between samples taken at the same time, so the corresponding
+    The sampling schedule asks for the same time more than once ($repeats repeated
+    value(s)). No mcmc step happens between samples taken at the same time, so the
+    corresponding
     sequences will be identical. Use a non-zero `spacing`, or pass distinct sampling times.
     """
     return nothing

@@ -74,13 +74,13 @@ end
 """
     is_symmetric_mutation_matrix(μ; atol=1e-8)
 
-Whether `μ` is symmetric up to `atol`, which decides whether the sampled equilibrium is still
-the Potts model or mutation-selection balance. The diagonal is ignored, as everywhere else.
+Whether `μ` is symmetric up to `atol`, which decides whether the sampled equilibrium is
+still the Potts model or mutation-selection balance. The diagonal is ignored, as everywhere
+else.
 """
 function is_symmetric_mutation_matrix(μ; atol=1e-8)
     return all(
-        isapprox(μ[a, b], μ[b, a]; atol) for
-        a in axes(μ, 1), b in axes(μ, 2) if a < b
+        isapprox(μ[a, b], μ[b, a]; atol) for a in axes(μ, 1), b in axes(μ, 2) if a < b
     )
 end
 
@@ -108,8 +108,8 @@ Allowed values of `step_type` differ between the continuous and discrete cases.
 
 ## Discrete sampling
 
-Time is measured in swaps: accepted (or attempted) changes of one sequence position. Sampling
-times must therefore be integers.
+Time is measured in swaps: accepted (or attempted) changes of one sequence position.
+Sampling times must therefore be integers.
 
 - `step_type`: `:gibbs` only. I intend to implement `:metropolis` and maybe `:glauber`.
 - `step_meaning` (:discrete only): whether a swap count towards equilibration or not.
@@ -218,9 +218,9 @@ directly.
             ) "Off-diagonal entries of `mutation_matrix` must be non-negative."
 
             is_symmetric_mutation_matrix(mutation_matrix) || @warn """
-                `mutation_matrix` is not symmetric: the sampled equilibrium is no longer the \
-                Potts model but mutation-selection balance. This is a valid model - make sure \
-                it is what you intend.
+                `mutation_matrix` is not symmetric: the sampled equilibrium is no \
+                longer the Potts model but mutation-selection balance. This is a valid \
+                model - make sure it is what you intend.
                 """ maxlog = 1
 
             if sampling_type == :discrete

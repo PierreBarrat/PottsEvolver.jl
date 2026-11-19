@@ -241,18 +241,19 @@ end
 
 Compute the average transition rate for the continuous time Markov chain based on `g`.
 
-In the first form, a sample from `g` is drawn for the averaging: `n_samples` independent
-chains, each burnt in for `burnin` and contributing one sequence. One sequence per chain gives
-independence between the samples outright, and the chains start from different random
-sequences, so one trapped trajectory cannot stand in for the equilibrium.
+In the first form, a sample from `g` is drawn for the averaging: `n_samples`
+independent chains, each burnt in for `burnin` and contributing one sequence. One sequence
+per chain gives independence between the samples outright, and the chains start from
+different random sequences, so one trapped trajectory cannot stand in for the equilibrium.
 
-`s0` is only used to provide a type (codon, aa, rna or numerical): each chain starts from its
-own random sequence of that type, not from `s0` itself. `burnin` defaults to `10 * L` mcmc
-steps, or, in the asymmetric-`mutation_matrix` case below, to `5.0` units of continuous time.
-Pass `rng` to make the whole thing reproducible.
+`s0` is only used to provide a type (codon, aa, rna or numerical): each chain starts from
+its own random sequence of that type, not from `s0` itself. `burnin` defaults to `10 * L`
+mcmc steps, or, in the asymmetric-`mutation_matrix` case below, to `5.0` units of
+continuous time. Pass `rng` to make the whole thing reproducible.
 
 In the second form, the sample is provided, either as a vector of sequences or as a
-[`SequenceSample`](@ref). To average over sequences stored in a fasta file, read them yourself and pass the result:
+[`SequenceSample`](@ref). To average over sequences stored in a fasta file, read them
+yourself and pass the result:
 ```julia
 using FASTX
 S = [AASequence(sequence(rec)) for rec in FASTAReader(open(fastafile))]
@@ -270,10 +271,11 @@ function average_transition_rate(
     burnin=nothing,
     n_samples=250,
 )
-    # `params` says how the averaging sample is drawn and must be discrete; `mutation_matrix`
-    # says what the rates are weighted by. They used to be the same object, so a caller who
-    # left `params` unset silently lost their matrix: the sample was built from a fresh
-    # discrete `SamplingParameters`, whose `mutation_matrix` is `nothing`.
+    # `params` says how the averaging sample is drawn and must be discrete;
+    # `mutation_matrix` says what the rates are weighted by. They used to be the same
+    # object, so a caller who left `params` unset silently lost their matrix: the sample
+    # was built from a fresh discrete `SamplingParameters`, whose `mutation_matrix` is
+    # `nothing`.
     if isnothing(mutation_matrix) || is_symmetric_mutation_matrix(mutation_matrix)
         # the equilibrium is still the Potts model, so a discrete sample is correct
         params_eq = something(params, SamplingParameters(; sampling_type=:discrete))
@@ -289,12 +291,13 @@ function average_transition_rate(
         return average_transition_rate(g, step_type, sample_eq; mutation_matrix)
     end
 
-    # An asymmetric matrix moves the equilibrium to mutation-selection balance, so the sample
-    # has to come from the continuous process itself - which needs the Ω being computed here.
-    # That is not circular: Ω only rescales time (the substitution made at each step is drawn
-    # from the unscaled rates), so any positive value samples the right distribution. It only
-    # sets how many substitutions a given time buys, and underestimating it oversamples, which
-    # is the safe direction - hence the factor 10 below.
+    # An asymmetric matrix moves the equilibrium to mutation-selection balance, so the
+    # sample has to come from the continuous process itself - which needs the Ω being
+    # computed here. That is not circular: Ω only rescales time (the substitution made at
+    # each step is drawn from the unscaled rates), so any positive value samples the right
+    # distribution. It only sets how many substitutions a given time buys, and
+    # underestimating it oversamples, which is the safe direction - hence the factor 10
+    # below.
     @info """
     `mutation_matrix` is asymmetric: computing Ω from a continuous sample of the \
     mutation-selection equilibrium, which takes a second sampling pass.
